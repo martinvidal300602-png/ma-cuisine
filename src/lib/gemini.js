@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
 const GEMINI_MODEL = GEMINI_URL.match(/models\/([^:]+)/)?.[1] || 'unknown';
 const isDev = import.meta.env.DEV;
 
