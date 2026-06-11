@@ -3,7 +3,7 @@
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
 
 const PROMPT = `Analyse cette photo de réfrigérateur ou de placard.
 Identifie tous les produits alimentaires visibles.
