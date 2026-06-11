@@ -3,11 +3,13 @@ import { useState } from 'react';
 import AddMenu from '../components/Add/AddMenu';
 import FridgePhoto from '../components/Add/FridgePhoto';
 import BarcodeScanner from '../components/Add/BarcodeScanner';
+import ReceiptScanner from '../components/Add/ReceiptScanner';
 import ManualForm from '../components/Add/ManualForm';
 
 const TITRES = {
   photo: 'Photo du frigo',
   barcode: 'Code-barres',
+  receipt: 'Scanner un ticket',
   manual: 'Saisie manuelle',
 };
 
@@ -43,6 +45,7 @@ export default function AddProduct({ addProduct, addProducts, userEmail }) {
       {!mode && <AddMenu onSelect={setMode} />}
       {mode === 'photo' && <FridgePhoto onSubmitMany={addProducts} userEmail={userEmail} />}
       {mode === 'barcode' && <BarcodeScanner onSubmit={handleAddOne} />}
+      {mode === 'receipt' && <ReceiptScanner onSubmitMany={addProducts} userEmail={userEmail} />}
       {mode === 'manual' && (
         <div className="bg-card rounded-card border border-border p-4">
           <ManualForm onSubmit={handleAddOne} />

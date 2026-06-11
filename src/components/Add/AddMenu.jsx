@@ -16,6 +16,12 @@ const MODES = [
     desc: "Saisissez un code-barres, la fiche est pré-remplie depuis OpenFoodFacts.",
   },
   {
+    id: 'receipt',
+    icon: '🧾',
+    title: 'Scanner un ticket',
+    desc: 'Photographiez un ticket de caisse, puis validez les produits détectés.',
+  },
+  {
     id: 'manual',
     icon: '✏️',
     title: 'Saisie manuelle',

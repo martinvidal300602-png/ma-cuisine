@@ -1,0 +1,332 @@
+// src/lib/receiptGemini.js
+// Analyse d'un ticket de caisse via Google Gemini.
+
+import { z } from 'zod';
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+
+const MAX_IMAGE_WIDTH = 1600;
+const JPEG_QUALITY = 0.85;
+const OUTPUT_MIME_TYPE = 'image/jpeg';
+
+export const RECEIPT_CATEGORIES = [
+  'Viandes & Poissons',
+  'Légumes & Fruits',
+  'Produits laitiers',
+  'Conserves & Épicerie',
+  'Surgelés',
+  'Céréales & Pâtes',
+  'Condiments & Sauces',
+  'Boissons',
+  'Boulangerie',
+  'Autre',
+];
+
+export const RECEIPT_LOCATIONS = [
+  'Frigo',
+  'Placard sous fenêtre',
+  'Plan de travail',
+  'Placard épices',
+];
+
+const PROMPT = `Tu es un système d’extraction de produits depuis un ticket de caisse français.
+Lis uniquement les lignes correspondant à des produits achetés.
+Ignore total, sous-total, TVA, carte bancaire, rendu monnaie, fidélité, date, magasin, promotions non alimentaires.
+Les tickets peuvent contenir des abréviations françaises.
+Pour chaque produit, propose un emplacement probable parmi :
+- Frigo
+- Placard sous fenêtre
+- Plan de travail
+- Placard épices
+
+Règles d’emplacement :
+- produits frais, lait, yaourt, fromage, viande, poisson, légumes frais, fruits fragiles → Frigo
+- pâtes, riz, conserves, biscuits, céréales, chips, farine, sucre → Placard sous fenêtre
+- huile, vinaigre, fruits à température ambiante, pain en cours, café utilisé souvent → Plan de travail
+- sel, poivre, herbes, épices, paprika, curry, basilic sec → Placard épices
+
+Exemples d’abréviations :
+- LT DEMI ECR 1L → lait demi-écrémé, Produits laitiers, quantity 1, unit bouteille, Frigo
+- OEUFS X6 → œufs, Autre, quantity 6, unit pièces, Frigo
+- PDT → pommes de terre, Légumes & Fruits, Placard sous fenêtre ou Plan de travail selon contexte
+- TOM → tomates, Légumes & Fruits, Frigo
+- YAOURT NAT → yaourt nature, Produits laitiers, Frigo
+- PATES → pâtes, Céréales & Pâtes, Placard sous fenêtre
+- PAPRIKA → paprika, Condiments & Sauces, Placard épices
+
+Si tu n’es pas sûr, mets confidence low.
+Retourne uniquement le JSON demandé.`;
+
+const ReceiptItemSchema = z
+  .object({
+    raw_label: z.string().trim().min(1),
+    name: z.string().trim().min(1),
+    brand: z.string().trim().nullable(),
+    category: z.enum(RECEIPT_CATEGORIES),
+    quantity: z.coerce.number().positive().default(1),
+    unit: z.string().trim().min(1),
+    suggested_location: z.enum(RECEIPT_LOCATIONS),
+    confidence: z.enum(['high', 'medium', 'low']),
+  })
+  .strict();
+
+const ReceiptUncertainItemSchema = z
+  .object({
+    raw_label: z.string().trim().min(1),
+    reason: z.string().trim().min(1),
+  })
+  .strict();
+
+const ReceiptResponseSchema = z
+  .object({
+    items: z.array(ReceiptItemSchema).default([]),
+    uncertain_items: z.array(ReceiptUncertainItemSchema).default([]),
+  })
+  .strict();
+
+const GEMINI_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          raw_label: { type: 'string' },
+          name: { type: 'string' },
+          brand: { type: 'string', nullable: true },
+          category: { type: 'string', enum: RECEIPT_CATEGORIES },
+          quantity: { type: 'number' },
+          unit: { type: 'string' },
+          suggested_location: { type: 'string', enum: RECEIPT_LOCATIONS },
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+        },
+        required: [
+          'raw_label',
+          'name',
+          'brand',
+          'category',
+          'quantity',
+          'unit',
+          'suggested_location',
+          'confidence',
+        ],
+      },
+    },
+    uncertain_items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          raw_label: { type: 'string' },
+          reason: { type: 'string' },
+        },
+        required: ['raw_label', 'reason'],
+      },
+    },
+  },
+  required: ['items', 'uncertain_items'],
+};
+
+/**
+ * Analyse une photo de ticket de caisse.
+ * @param {File} file
+ * @returns {Promise<{items: Array, uncertain_items: Array}>}
+ */
+export async function analyserTicketCaisse(file) {
+  if (!GEMINI_API_KEY) {
+    throw new Error(
+      'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env'
+    );
+  }
+
+  const image = await preparerImageTicket(file);
+  const text = await appelerGeminiTicket(image);
+  const parsed = validerReponseTicket(text);
+
+  return {
+    items: parsed.items.map(normaliserItemTicket),
+    uncertain_items: parsed.uncertain_items,
+  };
+}
+
+async function appelerGeminiTicket(image) {
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: PROMPT },
+          {
+            inline_data: {
+              mime_type: image.mimeType,
+              data: image.base64,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+      responseSchema: GEMINI_RESPONSE_SCHEMA,
+    },
+  };
+
+  let response;
+  try {
+    response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new Error('Impossible de joindre le service Gemini. Vérifiez votre connexion.');
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Erreur Gemini (${response.status}) : ${detail.slice(0, 200)}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text)
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    throw new Error("Gemini n'a renvoyé aucun résultat exploitable.");
+  }
+
+  return text;
+}
+
+function validerReponseTicket(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error("La réponse de Gemini n'est pas un JSON valide. Réessayez avec une photo plus nette.");
+  }
+
+  const result = ReceiptResponseSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error("La réponse de Gemini ne respecte pas le schéma ticket attendu.");
+  }
+
+  return result.data;
+}
+
+function normaliserItemTicket(item) {
+  return {
+    raw_label: item.raw_label,
+    nom: item.name,
+    marque: item.brand || '',
+    categorie: item.category,
+    quantite: Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1,
+    unite: nettoyerUnite(item.unit),
+    emplacement: item.suggested_location,
+    confidence: item.confidence,
+    selected: item.confidence === 'high',
+    date_expiration: '',
+  };
+}
+
+function nettoyerUnite(unit) {
+  return String(unit || '')
+    .replace(/\d+(?:[,.]\d+)?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'unité(s)';
+}
+
+async function preparerImageTicket(file) {
+  const source = await chargerImageOrientee(file);
+  const canvas = dessinerDansCanvas(source, {
+    sx: 0,
+    sy: 0,
+    sw: source.width,
+    sh: source.height,
+    maxWidth: MAX_IMAGE_WIDTH,
+  });
+
+  libererSource(source);
+  return canvasVersBase64(canvas);
+}
+
+async function chargerImageOrientee(file) {
+  if ('createImageBitmap' in window) {
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch (err) {
+      return createImageBitmap(file);
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Lecture du fichier image impossible.'));
+    };
+    img.src = url;
+  });
+}
+
+function dessinerDansCanvas(source, { sx, sy, sw, sh, maxWidth }) {
+  const scale = Math.min(1, maxWidth / sw);
+  const width = Math.max(1, Math.round(sw * scale));
+  const height = Math.max(1, Math.round(sh * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error("Impossible de préparer l'image pour l'analyse.");
+  }
+
+  ctx.drawImage(source, sx, sy, sw, sh, 0, 0, width, height);
+  return canvas;
+}
+
+function canvasVersBase64(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Compression de l'image impossible."));
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = String(reader.result).split(',')[1];
+          if (!base64) {
+            reject(new Error('Lecture du fichier image impossible.'));
+            return;
+          }
+          resolve({ base64, mimeType: OUTPUT_MIME_TYPE });
+        };
+        reader.onerror = () => reject(new Error('Lecture du fichier image impossible.'));
+        reader.readAsDataURL(blob);
+      },
+      OUTPUT_MIME_TYPE,
+      JPEG_QUALITY
+    );
+  });
+}
+
+function libererSource(source) {
+  if (typeof source.close === 'function') {
+    source.close();
+  }
+}
