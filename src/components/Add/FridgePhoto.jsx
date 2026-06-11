@@ -4,6 +4,8 @@ import Button from '../UI/Button';
 import { analyserPhotoFrigo } from '../../lib/gemini';
 import { CATEGORIES, DEFAULT_EMPLACEMENT, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 
+const isDev = import.meta.env.DEV;
+
 /**
  * Mode A - photo large du frigo/placard analysée par Gemini.
  * Les produits fiables ou à vérifier passent toujours par une validation humaine.
@@ -67,6 +69,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
           date_expiration: '',
         }))
       );
+      logPhotoDebug('items détectés', produits);
     } catch (err) {
       setError(err.message || "L'analyse a échoué.");
     } finally {
@@ -87,18 +90,11 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     .filter(({ item }) => item.confidence === 'medium');
 
   const handleAddAll = async () => {
-    const toAdd = detected
-      .filter((d) => d.selected && d.nom.trim() && d.confidence !== 'low')
-      .map((d) => ({
-        nom: d.nom.trim(),
-        marque: d.marque ? String(d.marque).trim() || null : null,
-        categorie: d.categorie,
-        emplacement: normaliserEmplacement(d.emplacement),
-        quantite: Number.isFinite(Number(d.quantite)) && Number(d.quantite) > 0 ? Number(d.quantite) : 1,
-        unite: d.unite || 'unité(s)',
-        date_expiration: d.date_expiration || null,
-        ajoute_par: userEmail ?? null,
-      }));
+    const checkedItems = detected.filter((d) => d.selected && d.nom.trim() && d.confidence !== 'low');
+    const toAdd = checkedItems.map((item) => buildPhotoProductPayload(item, userEmail));
+
+    logPhotoDebug('items cochés', checkedItems);
+    logPhotoDebug('payload envoyé à Supabase', toAdd);
 
     if (toAdd.length === 0) {
       setError('Sélectionnez au moins un produit avec un nom.');
@@ -108,7 +104,8 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     setAdding(true);
     setError(null);
     try {
-      await onSubmitMany(toAdd);
+      const inserted = await onSubmitMany(toAdd);
+      logPhotoDebug('réponse Supabase', inserted);
       setDetected([]);
       setUncertain([]);
       setFile(null);
@@ -116,6 +113,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
       setPreviewUrl(null);
       setDone(true);
     } catch (err) {
+      logPhotoDebug('erreur Supabase', err);
       setError(err.message || "L'ajout a échoué.");
     } finally {
       setAdding(false);
@@ -234,6 +232,30 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
       )}
     </div>
   );
+}
+
+function buildPhotoProductPayload(item, userEmail) {
+  const quantite = Number(item.quantite);
+
+  return {
+    nom: item.nom.trim(),
+    marque: item.marque ? String(item.marque).trim() || null : null,
+    categorie: CATEGORIES.includes(item.categorie) ? item.categorie : 'Autre',
+    emplacement: normaliserEmplacement(item.emplacement),
+    quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
+    unite: String(item.unite || '').trim() || 'unité(s)',
+    date_expiration: item.date_expiration || null,
+    notes: null,
+    photo_url: null,
+    code_barres: null,
+    ajoute_par: userEmail ?? null,
+  };
+}
+
+function logPhotoDebug(label, value) {
+  if (isDev) {
+    console.log(`[photo-stock] ${label}`, value);
+  }
 }
 
 function renderDetectedItem(item, index, updateItem, inputClass) {

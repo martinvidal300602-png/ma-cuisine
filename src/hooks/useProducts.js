@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+const isDev = import.meta.env.DEV;
+
 /**
  * Charge la liste des produits (triés par date d'expiration croissante)
  * et s'abonne aux changements en temps réel sur la table `produits`.
@@ -61,9 +63,21 @@ export function useProducts() {
   const addProducts = useCallback(
     async (list) => {
       if (!Array.isArray(list) || list.length === 0) return;
-      const { error: err } = await supabase.from('produits').insert(list);
-      if (err) throw new Error('Ajout en masse impossible : ' + err.message);
+
+      const { data, error: err } = await supabase.from('produits').insert(list).select('*');
+
+      if (isDev) {
+        console.log('[supabase-stock] addProducts payload', list);
+        console.log('[supabase-stock] addProducts response', data);
+        console.log('[supabase-stock] addProducts error', err);
+      }
+
+      if (err) {
+        const details = [err.message, err.details, err.hint].filter(Boolean).join(' ');
+        throw new Error('Ajout en masse impossible : ' + details);
+      }
       await fetchProducts();
+      return data ?? [];
     },
     [fetchProducts]
   );

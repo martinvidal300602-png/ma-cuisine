@@ -11,7 +11,7 @@ CREATE TABLE produits (
                     'Condiments & Sauces', 'Boissons', 'Boulangerie', 'Autre'
                   )),
   emplacement     TEXT CHECK (emplacement IN (
-                    'Réfrigérateur', 'Congélateur', 'Placard', 'Cellier', 'Plan de travail'
+                    'Frigo', 'Placard sous fenêtre', 'Plan de travail', 'Placard épices'
                   )),
   quantite        REAL NOT NULL DEFAULT 1,
   unite           TEXT DEFAULT 'unité(s)',
