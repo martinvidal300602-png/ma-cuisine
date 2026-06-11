@@ -120,12 +120,26 @@ const SCORE_CONFIDENCE = {
   3: 'high',
 };
 
+const UNIT_TRANSLATIONS = {
+  bag: 'paquet',
+  bags: 'paquets',
+  pack: 'paquet',
+  packs: 'paquets',
+  can: 'conserve',
+  cans: 'conserves',
+  jar: 'bocal',
+  jars: 'bocaux',
+  bottle: 'bouteille',
+  bottles: 'bouteilles',
+};
+
 /**
  * Analyse une photo large de frigo/placard et retourne des listes prêtes pour validation UI.
  * @param {File} file
+ * @param {string} emplacement
  * @returns {Promise<{items_high_confidence: Array, items_to_verify: Array, uncertain_items: Array}>}
  */
-export async function analyserPhotoFrigo(file) {
+export async function analyserPhotoFrigo(file, emplacement = 'Frigo') {
   if (!GEMINI_API_KEY) {
     throw new Error(
       'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env'
@@ -136,7 +150,7 @@ export async function analyserPhotoFrigo(file) {
   const rawResult = await appelerGemini(images);
   const parsed = validerReponseGemini(rawResult);
 
-  return fusionnerResultats(parsed);
+  return fusionnerResultats(parsed, emplacement);
 }
 
 async function appelerGemini(images) {
@@ -232,7 +246,7 @@ function validerReponseGemini(text) {
   return result.data;
 }
 
-function fusionnerResultats(result) {
+function fusionnerResultats(result, emplacement) {
   const byName = new Map();
 
   result.items.forEach((item) => {
@@ -265,6 +279,7 @@ function fusionnerResultats(result) {
     return convertirVersProduitUI({
       ...item,
       confidence,
+      emplacement,
     });
   });
 
@@ -283,13 +298,15 @@ function fusionnerResultats(result) {
 }
 
 function convertirVersProduitUI(item) {
+  const { quantite, unite } = normaliserQuantite(item.quantity_estimate);
+
   return {
     nom: item.name,
     marque: null,
-    quantite: 1,
-    unite: item.quantity_estimate || 'unité(s)',
+    quantite,
+    unite,
     categorie: APP_CATEGORY_BY_AI_CATEGORY[item.category] || 'Autre',
-    emplacement: 'Réfrigérateur',
+    emplacement: item.emplacement,
     date_expiration: '',
     confidence: item.confidence,
     evidence: item.evidence,
@@ -297,6 +314,43 @@ function convertirVersProduitUI(item) {
     occurrences: item.occurrences,
     ai_category: item.category,
     kind: 'item',
+  };
+}
+
+function normaliserQuantite(quantityEstimate) {
+  const raw = String(quantityEstimate || '').trim();
+  if (!raw) {
+    return { quantite: 1, unite: 'unité(s)' };
+  }
+
+  const normalized = raw.toLowerCase().replace(',', '.');
+  const numberMatch = normalized.match(/(\d+(?:\.\d+)?)/);
+  const quantite = numberMatch ? Number(numberMatch[1]) : 1;
+  const withoutNumber = normalized
+    .replace(/(\d+(?:\.\d+)?)/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const unitKey = (withoutNumber.split(/\s+/)[0] || normalized.split(/\s+/)[0] || '').replace(
+    /[^a-z]/g,
+    ''
+  );
+  const translated = UNIT_TRANSLATIONS[unitKey];
+
+  if (translated) {
+    return {
+      quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
+      unite: translated,
+    };
+  }
+
+  const translatedText = raw.replace(/\b(bags?|packs?|cans?|jars?|bottles?)\b/gi, (match) => {
+    const replacement = UNIT_TRANSLATIONS[match.toLowerCase()];
+    return replacement || match;
+  });
+
+  return {
+    quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
+    unite: numberMatch ? translatedText.replace(numberMatch[0], '').trim() || 'unité(s)' : translatedText,
   };
 }
 

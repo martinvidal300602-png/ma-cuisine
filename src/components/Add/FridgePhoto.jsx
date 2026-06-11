@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Button from '../UI/Button';
 import { analyserPhotoFrigo } from '../../lib/gemini';
-import { CATEGORIES, EMPLACEMENTS } from './ManualForm';
+import { CATEGORIES, DEFAULT_EMPLACEMENT, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 
 /**
  * Mode A - photo large du frigo/placard analysée par Gemini.
@@ -15,6 +15,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
   const [error, setError] = useState(null);
   const [detected, setDetected] = useState([]);
   const [uncertain, setUncertain] = useState([]);
+  const [selectedEmplacement, setSelectedEmplacement] = useState(DEFAULT_EMPLACEMENT);
   const [adding, setAdding] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -36,9 +37,13 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     setError(null);
     setDone(false);
     try {
-      const result = await analyserPhotoFrigo(file);
+      const emplacement = normaliserEmplacement(selectedEmplacement);
+      const result = await analyserPhotoFrigo(file, emplacement);
       const produits = [
-        ...result.items_high_confidence.map((p) => ({ ...p, selected: true })),
+        ...result.items_high_confidence.map((p) => ({
+          ...p,
+          selected: p.confidence === 'high' && p.visible_part === 'complete',
+        })),
         ...result.items_to_verify.map((p) => ({ ...p, selected: false })),
       ];
 
@@ -58,7 +63,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
         produits.map((p) => ({
           ...p,
           categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
-          emplacement: EMPLACEMENTS.includes(p.emplacement) ? p.emplacement : 'Réfrigérateur',
+          emplacement,
           date_expiration: '',
         }))
       );
@@ -88,7 +93,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
         nom: d.nom.trim(),
         marque: d.marque ? String(d.marque).trim() || null : null,
         categorie: d.categorie,
-        emplacement: d.emplacement,
+        emplacement: normaliserEmplacement(d.emplacement),
         quantite: Number.isFinite(Number(d.quantite)) && Number(d.quantite) > 0 ? Number(d.quantite) : 1,
         unite: d.unite || 'unité(s)',
         date_expiration: d.date_expiration || null,
@@ -132,6 +137,21 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
             className="block w-full text-sm text-muted file:mr-3 file:px-4 file:py-2.5 file:rounded-card file:border-0 file:bg-accent file:text-white file:text-sm file:font-medium"
             aria-label="Prendre une photo"
           />
+        </label>
+
+        <label className="block">
+          <span className="block text-sm font-medium mb-1">Emplacement de la photo</span>
+          <select
+            value={selectedEmplacement}
+            onChange={(e) => setSelectedEmplacement(normaliserEmplacement(e.target.value))}
+            className="w-full px-3 py-2.5 rounded-card border border-border bg-bg text-sm"
+          >
+            {EMPLACEMENTS.map((emplacement) => (
+              <option key={emplacement} value={emplacement}>
+                {emplacement}
+              </option>
+            ))}
+          </select>
         </label>
 
         {previewUrl && (

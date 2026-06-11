@@ -16,18 +16,38 @@ export const CATEGORIES = [
 ];
 
 export const EMPLACEMENTS = [
-  'Réfrigérateur',
-  'Congélateur',
-  'Placard',
-  'Cellier',
+  'Frigo',
+  'Placard sous fenêtre',
   'Plan de travail',
+  'Placard épices',
 ];
+
+export const DEFAULT_EMPLACEMENT = 'Frigo';
+
+export function normaliserEmplacement(emplacement) {
+  const value = String(emplacement || '').trim();
+  if (EMPLACEMENTS.includes(value)) return value;
+
+  const legacy = {
+    Réfrigérateur: 'Frigo',
+    Refrigerateur: 'Frigo',
+    Congélateur: 'Frigo',
+    Congelateur: 'Frigo',
+    Placard: 'Placard sous fenêtre',
+    Épicerie: 'Placard sous fenêtre',
+    Epicerie: 'Placard sous fenêtre',
+    Cellier: 'Placard sous fenêtre',
+    Cuisine: 'Plan de travail',
+  };
+
+  return legacy[value] || DEFAULT_EMPLACEMENT;
+}
 
 const DEFAUT = {
   nom: '',
   marque: '',
   categorie: 'Autre',
-  emplacement: 'Réfrigérateur',
+  emplacement: DEFAULT_EMPLACEMENT,
   quantite: 1,
   unite: 'unité(s)',
   date_expiration: '',
@@ -40,7 +60,11 @@ const DEFAUT = {
  * Formulaire de saisie manuelle. Peut être pré-rempli (scan code-barres) via `initial`.
  */
 export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajouter le produit' }) {
-  const [form, setForm] = useState({ ...DEFAUT, ...initial });
+  const [form, setForm] = useState({
+    ...DEFAUT,
+    ...initial,
+    emplacement: normaliserEmplacement(initial.emplacement || DEFAUT.emplacement),
+  });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -68,7 +92,7 @@ export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajou
         nom: form.nom.trim(),
         marque: form.marque.trim() || null,
         categorie: form.categorie,
-        emplacement: form.emplacement,
+        emplacement: normaliserEmplacement(form.emplacement),
         quantite,
         unite: form.unite.trim() || 'unité(s)',
         date_expiration: form.date_expiration || null,
