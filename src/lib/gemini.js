@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
 
 const MAX_IMAGE_WIDTH = 1600;
 const JPEG_QUALITY = 0.85;
