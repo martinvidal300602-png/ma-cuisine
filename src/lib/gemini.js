@@ -6,10 +6,21 @@ import { z } from 'zod';
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+const GEMINI_MODEL = GEMINI_URL.match(/models\/([^:]+)/)?.[1] || 'unknown';
+const isDev = import.meta.env.DEV;
 
 const MAX_IMAGE_WIDTH = 1600;
 const JPEG_QUALITY = 0.85;
 const OUTPUT_MIME_TYPE = 'image/jpeg';
+const IMAGE_LABELS = [
+  'full',
+  'crop_top_left',
+  'crop_top_right',
+  'crop_middle_left',
+  'crop_middle_right',
+  'crop_bottom_left',
+  'crop_bottom_right',
+];
 
 export const FOOD_CATEGORIES = [
   'fruit',
@@ -45,6 +56,12 @@ const BISCUIT_CATEGORY = APP_CATEGORIES.has('Biscuits & Snacks sucrés')
   : 'Boulangerie';
 
 const PROMPT = `Tu es un système d'inventaire alimentaire par image.
+Analyse les 7 images comme une seule scène.
+L'image full donne le contexte général.
+Les crops servent à mieux voir les détails.
+Ne crée pas de doublons entre full et crops.
+Si un même produit apparaît dans plusieurs images, fusionne-le.
+Pour chaque produit, ajoute sources avec les noms des images où il est visible, par exemple ["full", "crop_middle_right"].
 Identifie uniquement les aliments et produits alimentaires visibles.
 Ne devine pas le contenu des sacs opaques.
 Si un objet est partiellement caché, confidence = low ou medium.
@@ -63,6 +80,7 @@ const GeminiItemSchema = z
     confidence: z.enum(['high', 'medium', 'low']),
     evidence: z.string().trim().min(1),
     visible_part: z.enum(['complete', 'partial', 'hidden']),
+    sources: z.array(z.enum(IMAGE_LABELS)).default([]),
   })
   .strict();
 
@@ -94,8 +112,20 @@ const GEMINI_RESPONSE_SCHEMA = {
           confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
           evidence: { type: 'string' },
           visible_part: { type: 'string', enum: ['complete', 'partial', 'hidden'] },
+          sources: {
+            type: 'array',
+            items: { type: 'string', enum: IMAGE_LABELS },
+          },
         },
-        required: ['name', 'category', 'quantity_estimate', 'confidence', 'evidence', 'visible_part'],
+        required: [
+          'name',
+          'category',
+          'quantity_estimate',
+          'confidence',
+          'evidence',
+          'visible_part',
+          'sources',
+        ],
       },
     },
     uncertain_items: {
@@ -172,6 +202,7 @@ export async function analyserPhotoFrigo(file, emplacement = 'Frigo') {
   const images = await preparerImagesPourAnalyse(file);
   const rawResult = await appelerGemini(images);
   const parsed = validerReponseGemini(rawResult);
+  logGeminiDebug('items reçus', parsed.items.length);
 
   return fusionnerResultats(parsed, emplacement);
 }
@@ -184,21 +215,10 @@ async function appelerGemini(images) {
     responseSchema: GEMINI_RESPONSE_SCHEMA,
   });
 
-  let response = await envoyerRequeteGemini(body);
+  logGeminiDebug('modèle utilisé', GEMINI_MODEL);
+  logGeminiDebug('nombre d’images envoyées', images.length);
 
-  if (!response.ok && response.status === 400) {
-    const retryBody = creerPayloadGemini(images, {
-      temperature: 0.1,
-      maxOutputTokens: 4096,
-      responseFormat: {
-        text: {
-          mimeType: 'application/json',
-          schema: GEMINI_RESPONSE_SCHEMA,
-        },
-      },
-    });
-    response = await envoyerRequeteGemini(retryBody);
-  }
+  const response = await envoyerRequeteGemini(body);
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -226,7 +246,7 @@ function creerPayloadGemini(images, generationConfig) {
         parts: [
           { text: PROMPT },
           ...images.flatMap((image) => [
-            { text: `Image fournie: ${image.label}` },
+            { text: `Image ${image.label}` },
             {
               inline_data: {
                 mime_type: image.mimeType,
@@ -299,6 +319,7 @@ function fusionnerResultats(result, emplacement) {
         : normalizedItem.visible_part;
     existing.evidence = fusionnerTexte(existing.evidence, normalizedItem.evidence);
     existing.quantity = fusionnerQuantites(existing.quantity, normalizedItem.quantity);
+    existing.sources = fusionnerSources(existing.sources, normalizedItem.sources);
   });
 
   const items = merged.map((item) => {
@@ -338,6 +359,7 @@ function convertirVersProduitUI(item) {
     confidence: item.confidence,
     evidence: item.evidence,
     visible_part: item.visible_part,
+    sources: item.sources,
     occurrences: item.occurrences,
     ai_category: item.category,
     kind: 'item',
@@ -363,6 +385,7 @@ function normaliserProduitGemini(item) {
     category: correctedCategory,
     quantity: normaliserQuantite(item.quantity_estimate, name),
     evidence: traduireEvidence(item.evidence),
+    sources: Array.isArray(item.sources) ? item.sources.filter((source) => IMAGE_LABELS.includes(source)) : [],
   };
 }
 
@@ -405,8 +428,15 @@ function normaliserQuantite(quantityEstimate, name = '') {
 
   return {
     quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
-    unite: numberMatch ? translatedText.replace(numberMatch[0], '').trim() || 'unité(s)' : translatedText,
+    unite: numberMatch ? nettoyerUnite(translatedText) : nettoyerUnite(translatedText),
   };
+}
+
+function nettoyerUnite(unit) {
+  return String(unit || '')
+    .replace(/\d+(?:[,.]\d+)?/g, '')
+    .replace(/\s+/g, ' ')
+    .trim() || 'unité(s)';
 }
 
 function fusionnerQuantites(first, second) {
@@ -419,6 +449,10 @@ function fusionnerQuantites(first, second) {
     quantite,
     unite: quantite > 1 ? mettreUniteAuPluriel(first.unite) : first.unite,
   };
+}
+
+function fusionnerSources(first = [], second = []) {
+  return Array.from(new Set([...first, ...second].filter((source) => IMAGE_LABELS.includes(source))));
 }
 
 function mettreUniteAuPluriel(unite) {
@@ -503,6 +537,12 @@ function fusionnerTexte(first, second) {
   return `${first}; ${second}`;
 }
 
+function logGeminiDebug(label, value) {
+  if (isDev) {
+    console.log(`[gemini-photo] ${label}`, value);
+  }
+}
+
 async function preparerImagesPourAnalyse(file) {
   const source = await chargerImageOrientee(file);
   const fullCanvas = dessinerDansCanvas(source, {
@@ -517,7 +557,7 @@ async function preparerImagesPourAnalyse(file) {
 
   const images = [
     {
-      label: 'image_complete',
+      label: IMAGE_LABELS[0],
       ...(await canvasVersBase64(fullCanvas)),
     },
   ];
@@ -536,7 +576,7 @@ async function preparerImagesPourAnalyse(file) {
       });
 
       images.push({
-        label: `crop_l${row + 1}_c${col + 1}`,
+        label: IMAGE_LABELS[1 + row * 2 + col],
         ...(await canvasVersBase64(cropCanvas)),
       });
     }
