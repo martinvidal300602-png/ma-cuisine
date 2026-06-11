@@ -263,7 +263,7 @@ function renderDetectedItem(item, index, updateItem, inputClass) {
       </label>
 
       <p className="text-xs text-muted">
-        Confiance {item.confidence} - {item.visible_part} - {item.evidence}
+        Confiance {item.confidence} - {labelVisiblePart(item.visible_part)}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
@@ -333,4 +333,10 @@ function renderDetectedItem(item, index, updateItem, inputClass) {
       />
     </div>
   );
+}
+
+function labelVisiblePart(visiblePart) {
+  if (visiblePart === 'complete') return 'visible entièrement';
+  if (visiblePart === 'partial') return 'partiellement visible';
+  return 'peu visible';
 }

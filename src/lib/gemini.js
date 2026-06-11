@@ -39,6 +39,11 @@ const APP_CATEGORY_BY_AI_CATEGORY = {
   autre: 'Autre',
 };
 
+const APP_CATEGORIES = new Set(Object.values(APP_CATEGORY_BY_AI_CATEGORY));
+const BISCUIT_CATEGORY = APP_CATEGORIES.has('Biscuits & Snacks sucrés')
+  ? 'Biscuits & Snacks sucrés'
+  : 'Boulangerie';
+
 const PROMPT = `Tu es un système d'inventaire alimentaire par image.
 Identifie uniquement les aliments et produits alimentaires visibles.
 Ne devine pas le contenu des sacs opaques.
@@ -131,7 +136,25 @@ const UNIT_TRANSLATIONS = {
   jars: 'bocaux',
   bottle: 'bouteille',
   bottles: 'bouteilles',
+  pot: 'bocal',
+  pots: 'bocaux',
 };
+
+const UNIT_PLURALS = {
+  bocal: 'bocaux',
+  conserve: 'conserves',
+  paquet: 'paquets',
+  bouteille: 'bouteilles',
+};
+
+const EVIDENCE_TRANSLATIONS = [
+  [/visible on the shelf/gi, "visible sur l'étagère"],
+  [/on the shelf/gi, "sur l'étagère"],
+  [/visible/gi, 'visible'],
+  [/shelf/gi, 'étagère'],
+  [/partial(?:ly)? hidden/gi, 'partiellement caché'],
+  [/complete(?:ly)? visible/gi, 'entièrement visible'],
+];
 
 /**
  * Analyse une photo large de frigo/placard et retourne des listes prêtes pour validation UI.
@@ -247,32 +270,38 @@ function validerReponseGemini(text) {
 }
 
 function fusionnerResultats(result, emplacement) {
-  const byName = new Map();
+  const merged = [];
 
   result.items.forEach((item) => {
-    const key = normaliserNom(item.name);
-    if (!key) return;
+    const normalizedItem = normaliserProduitGemini(item);
+    if (!normalizedItem.normalizedName) return;
 
-    const existing = byName.get(key);
+    const existing = merged.find((candidate) =>
+      sontDoublonsProbables(candidate.normalizedName, normalizedItem.normalizedName)
+    );
+
     if (!existing) {
-      byName.set(key, { ...item, occurrences: 1 });
+      merged.push({ ...normalizedItem, occurrences: 1 });
       return;
     }
 
-    const currentScore = CONFIDENCE_SCORE[item.confidence];
+    const currentScore = CONFIDENCE_SCORE[normalizedItem.confidence];
     const existingScore = CONFIDENCE_SCORE[existing.confidence];
 
     existing.occurrences += 1;
-    existing.confidence = currentScore > existingScore ? item.confidence : existing.confidence;
+    existing.name = choisirNomLePlusPrecis(existing.name, normalizedItem.name);
+    existing.normalizedName = normaliserNom(existing.name);
+    existing.category = choisirCategorie(existing, normalizedItem);
+    existing.confidence = currentScore > existingScore ? normalizedItem.confidence : existing.confidence;
     existing.visible_part =
-      existing.visible_part === 'complete' || item.visible_part !== 'complete'
+      existing.visible_part === 'complete' || normalizedItem.visible_part !== 'complete'
         ? existing.visible_part
-        : item.visible_part;
-    existing.evidence = fusionnerTexte(existing.evidence, item.evidence);
-    existing.quantity_estimate = fusionnerTexte(existing.quantity_estimate, item.quantity_estimate);
+        : normalizedItem.visible_part;
+    existing.evidence = fusionnerTexte(existing.evidence, normalizedItem.evidence);
+    existing.quantity = fusionnerQuantites(existing.quantity, normalizedItem.quantity);
   });
 
-  const items = Array.from(byName.values()).map((item) => {
+  const items = merged.map((item) => {
     const boostedScore = item.occurrences > 1 ? Math.min(CONFIDENCE_SCORE[item.confidence] + 1, 3) : CONFIDENCE_SCORE[item.confidence];
     const confidence = SCORE_CONFIDENCE[boostedScore];
 
@@ -290,7 +319,7 @@ function fusionnerResultats(result, emplacement) {
       ...items.filter((item) => item.confidence === 'low'),
       ...result.uncertain_items.map((item) => ({
         description: item.description,
-        reason: item.reason,
+        reason: traduireEvidence(item.reason),
         kind: 'uncertain',
       })),
     ],
@@ -298,14 +327,12 @@ function fusionnerResultats(result, emplacement) {
 }
 
 function convertirVersProduitUI(item) {
-  const { quantite, unite } = normaliserQuantite(item.quantity_estimate);
-
   return {
     nom: item.name,
     marque: null,
-    quantite,
-    unite,
-    categorie: APP_CATEGORY_BY_AI_CATEGORY[item.category] || 'Autre',
+    quantite: item.quantity.quantite,
+    unite: item.quantity.unite,
+    categorie: categorieAppPourProduit(item),
     emplacement: item.emplacement,
     date_expiration: '',
     confidence: item.confidence,
@@ -317,7 +344,29 @@ function convertirVersProduitUI(item) {
   };
 }
 
-function normaliserQuantite(quantityEstimate) {
+function categorieAppPourProduit(item) {
+  const normalized = normaliserNom(item.name);
+  if (/\b(oreo|biscuit|biscuits|cookie|cookies)\b/.test(normalized)) return BISCUIT_CATEGORY;
+  if (normalized.includes('sauce tomate')) return 'Condiments & Sauces';
+  if (/\bolives?\b/.test(normalized)) return 'Conserves & Épicerie';
+  return APP_CATEGORY_BY_AI_CATEGORY[item.category] || 'Autre';
+}
+
+function normaliserProduitGemini(item) {
+  const name = String(item.name || '').trim();
+  const correctedCategory = corrigerCategorie(item.category, name);
+
+  return {
+    ...item,
+    name,
+    normalizedName: normaliserNom(name),
+    category: correctedCategory,
+    quantity: normaliserQuantite(item.quantity_estimate, name),
+    evidence: traduireEvidence(item.evidence),
+  };
+}
+
+function normaliserQuantite(quantityEstimate, name = '') {
   const raw = String(quantityEstimate || '').trim();
   if (!raw) {
     return { quantite: 1, unite: 'unité(s)' };
@@ -334,12 +383,18 @@ function normaliserQuantite(quantityEstimate) {
     /[^a-z]/g,
     ''
   );
-  const translated = UNIT_TRANSLATIONS[unitKey];
+  const nameKey = normaliserNom(name);
+  const forcedUnit =
+    nameKey.includes('sauce tomate') && (unitKey === 'pot' || unitKey === 'pots')
+      ? UNIT_TRANSLATIONS[unitKey]
+      : null;
+  const translated = forcedUnit || UNIT_TRANSLATIONS[unitKey];
 
   if (translated) {
+    const unite = quantite > 1 ? mettreUniteAuPluriel(translated) : translated;
     return {
       quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
-      unite: translated,
+      unite,
     };
   }
 
@@ -352,6 +407,83 @@ function normaliserQuantite(quantityEstimate) {
     quantite: Number.isFinite(quantite) && quantite > 0 ? quantite : 1,
     unite: numberMatch ? translatedText.replace(numberMatch[0], '').trim() || 'unité(s)' : translatedText,
   };
+}
+
+function fusionnerQuantites(first, second) {
+  if (!first) return second;
+  if (!second) return first;
+  if (uniteCanonique(first.unite) !== uniteCanonique(second.unite)) return first;
+
+  const quantite = first.quantite + second.quantite;
+  return {
+    quantite,
+    unite: quantite > 1 ? mettreUniteAuPluriel(first.unite) : first.unite,
+  };
+}
+
+function mettreUniteAuPluriel(unite) {
+  return UNIT_PLURALS[unite] || unite;
+}
+
+function uniteCanonique(unite) {
+  const value = String(unite || '').trim();
+  const singular = Object.entries(UNIT_PLURALS).find(([, plural]) => plural === value);
+  return singular ? singular[0] : value;
+}
+
+function choisirNomLePlusPrecis(first, second) {
+  const firstTokens = tokensNom(first);
+  const secondTokens = tokensNom(second);
+  if (secondTokens.length > firstTokens.length) return second;
+  if (secondTokens.length === firstTokens.length && second.length > first.length) return second;
+  return first;
+}
+
+function choisirCategorie(first, second) {
+  const preciseByName = corrigerCategorie(second.category, second.name);
+  if (preciseByName !== second.category) return preciseByName;
+
+  const firstCategory = corrigerCategorie(first.category, first.name);
+  if (firstCategory !== first.category) return firstCategory;
+  if (first.category === 'autre') return second.category;
+  if (second.category === 'autre') return first.category;
+  if (first.category === 'snack' && second.category !== 'snack') return second.category;
+  return first.category;
+}
+
+function corrigerCategorie(category, name) {
+  const normalized = normaliserNom(name);
+  if (/\b(oreo|biscuit|biscuits|cookie|cookies)\b/.test(normalized)) return 'snack';
+  if (normalized.includes('sauce tomate')) return 'sauce';
+  if (/\bolives?\b/.test(normalized)) return 'conserve';
+  return category;
+}
+
+function sontDoublonsProbables(first, second) {
+  if (!first || !second) return false;
+  if (first === second) return true;
+
+  const firstTokens = tokensNom(first);
+  const secondTokens = tokensNom(second);
+  const shorter = firstTokens.length <= secondTokens.length ? firstTokens : secondTokens;
+  const longer = firstTokens.length > secondTokens.length ? firstTokens : secondTokens;
+  const common = shorter.filter((token) => longer.includes(token));
+
+  if (shorter.length >= 2 && common.length === shorter.length) return true;
+
+  const union = new Set([...firstTokens, ...secondTokens]);
+  return common.length / union.size >= 0.75;
+}
+
+function tokensNom(name) {
+  return normaliserNom(name).split(' ').filter(Boolean);
+}
+
+function traduireEvidence(evidence) {
+  return EVIDENCE_TRANSLATIONS.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    String(evidence || '').trim()
+  );
 }
 
 function normaliserNom(name) {
