@@ -1,20 +1,20 @@
 // src/components/Add/FridgePhoto.jsx
 import { useState } from 'react';
 import Button from '../UI/Button';
-import { analyserPhotoFrigo, fichierVersBase64 } from '../../lib/gemini';
+import { analyserPhotoFrigo } from '../../lib/gemini';
 import { CATEGORIES, EMPLACEMENTS } from './ManualForm';
 
 /**
- * Mode A — photo du frigo analysée par Gemini Flash.
- * Les produits détectés sont affichés avec une checkbox et des champs modifiables,
- * puis insérés en masse dans Supabase.
+ * Mode A - photo large du frigo/placard analysée par Gemini.
+ * Les produits fiables ou à vérifier passent toujours par une validation humaine.
  */
 export default function FridgePhoto({ onSubmitMany, userEmail }) {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
-  const [detected, setDetected] = useState([]); // [{ ...produit, selected: bool }]
+  const [detected, setDetected] = useState([]);
+  const [uncertain, setUncertain] = useState([]);
   const [adding, setAdding] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -23,6 +23,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     if (!f) return;
     setFile(f);
     setDetected([]);
+    setUncertain([]);
     setError(null);
     setDone(false);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -35,22 +36,32 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     setError(null);
     setDone(false);
     try {
-      const { base64, mimeType } = await fichierVersBase64(file);
-      const produits = await analyserPhotoFrigo(base64, mimeType);
+      const result = await analyserPhotoFrigo(file);
+      const produits = [
+        ...result.items_high_confidence.map((p) => ({ ...p, selected: true })),
+        ...result.items_to_verify.map((p) => ({ ...p, selected: false })),
+      ];
+
+      setUncertain(result.uncertain_items);
+
       if (produits.length === 0) {
-        setError("Aucun produit n'a été détecté sur cette photo.");
         setDetected([]);
-      } else {
-        setDetected(
-          produits.map((p) => ({
-            ...p,
-            categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
-            emplacement: EMPLACEMENTS.includes(p.emplacement) ? p.emplacement : 'Réfrigérateur',
-            date_expiration: '',
-            selected: true,
-          }))
+        setError(
+          result.uncertain_items.length > 0
+            ? 'Aucun produit assez fiable pour être ajouté. Vérifiez les éléments incertains ci-dessous.'
+            : "Aucun produit n'a été détecté sur cette photo."
         );
+        return;
       }
+
+      setDetected(
+        produits.map((p) => ({
+          ...p,
+          categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
+          emplacement: EMPLACEMENTS.includes(p.emplacement) ? p.emplacement : 'Réfrigérateur',
+          date_expiration: '',
+        }))
+      );
     } catch (err) {
       setError(err.message || "L'analyse a échoué.");
     } finally {
@@ -63,10 +74,16 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
   };
 
   const selectedCount = detected.filter((d) => d.selected).length;
+  const highConfidence = detected
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.confidence === 'high');
+  const itemsToVerify = detected
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.confidence === 'medium');
 
   const handleAddAll = async () => {
     const toAdd = detected
-      .filter((d) => d.selected && d.nom.trim())
+      .filter((d) => d.selected && d.nom.trim() && d.confidence !== 'low')
       .map((d) => ({
         nom: d.nom.trim(),
         marque: d.marque ? String(d.marque).trim() || null : null,
@@ -88,6 +105,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     try {
       await onSubmitMany(toAdd);
       setDetected([]);
+      setUncertain([]);
       setFile(null);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -126,7 +144,7 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
 
         {file && (
           <Button size="lg" onClick={handleAnalyze} disabled={analyzing}>
-            {analyzing ? 'Analyse en cours…' : '✨ Analyser la photo'}
+            {analyzing ? 'Analyse en cours…' : 'Analyser la photo'}
           </Button>
         )}
 
@@ -137,117 +155,162 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
         )}
         {done && !error && (
           <p role="status" className="text-accent text-sm">
-            ✓ Produits ajoutés au stock.
+            Produits ajoutés au stock.
           </p>
         )}
       </div>
 
-      {detected.length > 0 && (
+      {(detected.length > 0 || uncertain.length > 0) && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-muted">
-            {detected.length} produit{detected.length > 1 ? 's' : ''} détecté{detected.length > 1 ? 's' : ''} — vérifiez avant d'ajouter
-          </h3>
+          {highConfidence.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted">
+                À valider avant ajout ({highConfidence.length})
+              </h3>
+              {highConfidence.map(({ item, index }) =>
+                renderDetectedItem(item, index, updateItem, inputClass)
+              )}
+            </section>
+          )}
 
-          {detected.map((item, i) => (
-            <div
-              key={i}
-              className={`bg-card rounded-card border p-3 space-y-2 ${
-                item.selected ? 'border-accent' : 'border-border opacity-60'
-              }`}
-            >
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={item.selected}
-                  onChange={(e) => updateItem(i, 'selected', e.target.checked)}
-                  className="w-4 h-4 accent-[var(--color-accent)]"
-                  aria-label={`Inclure ${item.nom || 'ce produit'}`}
-                />
-                <input
-                  type="text"
-                  value={item.nom}
-                  onChange={(e) => updateItem(i, 'nom', e.target.value)}
-                  className={`${inputClass} font-medium`}
-                  placeholder="Nom du produit"
-                  aria-label="Nom du produit"
-                />
-              </label>
+          {itemsToVerify.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted">
+                À vérifier manuellement ({itemsToVerify.length})
+              </h3>
+              {itemsToVerify.map(({ item, index }) =>
+                renderDetectedItem(item, index, updateItem, inputClass)
+              )}
+            </section>
+          )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={item.marque ?? ''}
-                  onChange={(e) => updateItem(i, 'marque', e.target.value)}
-                  className={inputClass}
-                  placeholder="Marque"
-                  aria-label="Marque"
-                />
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    inputMode="decimal"
-                    value={item.quantite}
-                    onChange={(e) => updateItem(i, 'quantite', e.target.value)}
-                    className={`${inputClass} font-num w-16`}
-                    aria-label="Quantité"
-                  />
-                  <input
-                    type="text"
-                    value={item.unite}
-                    onChange={(e) => updateItem(i, 'unite', e.target.value)}
-                    className={inputClass}
-                    placeholder="Unité"
-                    aria-label="Unité"
-                  />
+          {uncertain.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted">
+                Incertains, non ajoutés ({uncertain.length})
+              </h3>
+              {uncertain.map((item, i) => (
+                <div
+                  key={`${item.description || item.nom}-${i}`}
+                  className="bg-card rounded-card border border-border p-3 space-y-1"
+                >
+                  <p className="text-sm font-medium">{item.nom || item.description}</p>
+                  <p className="text-xs text-muted">
+                    {item.reason || item.evidence || 'Confiance trop faible.'}
+                  </p>
                 </div>
-              </div>
+              ))}
+            </section>
+          )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={item.categorie}
-                  onChange={(e) => updateItem(i, 'categorie', e.target.value)}
-                  className={inputClass}
-                  aria-label="Catégorie"
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={item.emplacement}
-                  onChange={(e) => updateItem(i, 'emplacement', e.target.value)}
-                  className={inputClass}
-                  aria-label="Emplacement"
-                >
-                  {EMPLACEMENTS.map((e2) => (
-                    <option key={e2} value={e2}>
-                      {e2}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <input
-                type="date"
-                value={item.date_expiration}
-                onChange={(e) => updateItem(i, 'date_expiration', e.target.value)}
-                className={inputClass}
-                aria-label="Date d'expiration"
-              />
-            </div>
-          ))}
-
-          <Button size="lg" onClick={handleAddAll} disabled={adding || selectedCount === 0}>
-            {adding
-              ? 'Ajout en cours…'
-              : `Ajouter ${selectedCount} produit${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
-          </Button>
+          {detected.length > 0 && (
+            <Button size="lg" onClick={handleAddAll} disabled={adding || selectedCount === 0}>
+              {adding
+                ? 'Ajout en cours…'
+                : `Ajouter ${selectedCount} produit${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
+            </Button>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function renderDetectedItem(item, index, updateItem, inputClass) {
+  return (
+    <div
+      key={`${item.nom}-${index}`}
+      className={`bg-card rounded-card border p-3 space-y-2 ${
+        item.selected ? 'border-accent' : 'border-border opacity-70'
+      }`}
+    >
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={item.selected}
+          onChange={(e) => updateItem(index, 'selected', e.target.checked)}
+          className="w-4 h-4 accent-[var(--color-accent)]"
+          aria-label={`Inclure ${item.nom || 'ce produit'}`}
+        />
+        <input
+          type="text"
+          value={item.nom}
+          onChange={(e) => updateItem(index, 'nom', e.target.value)}
+          className={`${inputClass} font-medium`}
+          placeholder="Nom du produit"
+          aria-label="Nom du produit"
+        />
+      </label>
+
+      <p className="text-xs text-muted">
+        Confiance {item.confidence} - {item.visible_part} - {item.evidence}
+      </p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          value={item.marque ?? ''}
+          onChange={(e) => updateItem(index, 'marque', e.target.value)}
+          className={inputClass}
+          placeholder="Marque"
+          aria-label="Marque"
+        />
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            inputMode="decimal"
+            value={item.quantite}
+            onChange={(e) => updateItem(index, 'quantite', e.target.value)}
+            className={`${inputClass} font-num w-16`}
+            aria-label="Quantité"
+          />
+          <input
+            type="text"
+            value={item.unite}
+            onChange={(e) => updateItem(index, 'unite', e.target.value)}
+            className={inputClass}
+            placeholder="Unité"
+            aria-label="Unité"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={item.categorie}
+          onChange={(e) => updateItem(index, 'categorie', e.target.value)}
+          className={inputClass}
+          aria-label="Catégorie"
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={item.emplacement}
+          onChange={(e) => updateItem(index, 'emplacement', e.target.value)}
+          className={inputClass}
+          aria-label="Emplacement"
+        >
+          {EMPLACEMENTS.map((e2) => (
+            <option key={e2} value={e2}>
+              {e2}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <input
+        type="date"
+        value={item.date_expiration}
+        onChange={(e) => updateItem(index, 'date_expiration', e.target.value)}
+        className={inputClass}
+        aria-label="Date d'expiration"
+      />
     </div>
   );
 }
