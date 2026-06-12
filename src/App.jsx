@@ -52,7 +52,13 @@ function AppConnectee({ user, signOut, tab, setTab }) {
           />
         )}
         {tab === 'ajouter' && (
-          <AddProduct addProduct={addProduct} addProducts={addProducts} userEmail={user?.email} />
+          <AddProduct
+            addProduct={addProduct}
+            addProducts={addProducts}
+            products={products}
+            updateProduct={updateProduct}
+            userEmail={user?.email}
+          />
         )}
         {tab === 'alertes' && (
           <Alerts
