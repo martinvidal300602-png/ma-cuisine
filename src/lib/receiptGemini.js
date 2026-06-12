@@ -226,20 +226,50 @@ function normaliserItemTicket(item) {
   const categorie = corrigerCategorieTicket(item.category, item.name);
   const dateExpiration = estimerDLCString(item.name, categorie, 'ticket');
   const sensitive = estProduitSensibleOuAmbigu(item);
+  const quantite = extraireQuantiteTicket(item) ?? normaliserQuantiteGemini(item.quantity);
+  const unite = pluraliserUnite(nettoyerUnite(item.unit), quantite);
 
   return {
     raw_label: item.raw_label,
     nom: item.name,
     marque: item.brand || '',
     categorie,
-    quantite: Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1,
-    unite: nettoyerUnite(item.unit),
+    quantite,
+    unite,
     emplacement: item.suggested_location,
     confidence: item.confidence,
     selected: item.confidence === 'high' && !sensitive,
     date_expiration: dateExpiration || '',
     date_expiration_estimee: Boolean(dateExpiration),
   };
+}
+
+function normaliserQuantiteGemini(quantity) {
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+}
+
+function extraireQuantiteTicket(item) {
+  const raw = String(item.raw_label || '').trim();
+  if (!raw) return null;
+
+  const tokens = raw.match(/\S+/g) || [];
+  if (tokens.length < 3) return null;
+
+  const priceIndex = tokens.findLastIndex((token) => estPrixTicket(token));
+  if (priceIndex <= 0) return null;
+
+  const quantityToken = tokens[priceIndex - 1];
+  if (!/^\d+$/.test(quantityToken)) return null;
+
+  const quantity = Number(quantityToken);
+  if (!Number.isInteger(quantity) || quantity <= 1 || quantity > 99) return null;
+
+  return quantity;
+}
+
+function estPrixTicket(token) {
+  const normalized = String(token || '').replace(',', '.');
+  return /^\d+\.\d{2}$/.test(normalized);
 }
 
 function corrigerCategorieTicket(category, name) {
@@ -264,6 +294,17 @@ const UNIT_TRANSLATIONS = {
   pieces: 'pièces',
 };
 
+const UNIT_PLURALS = {
+  bocal: 'bocaux',
+  paquet: 'paquets',
+  bouteille: 'bouteilles',
+  boîte: 'boîtes',
+  boite: 'boîtes',
+  pot: 'pots',
+  pièce: 'pièces',
+  piece: 'pièces',
+};
+
 function nettoyerUnite(unit) {
   const cleaned = String(unit || '')
     .replace(/\d+(?:[,.]\d+)?/g, '')
@@ -272,6 +313,11 @@ function nettoyerUnite(unit) {
   const normalized = cleaned.toLowerCase();
 
   return UNIT_TRANSLATIONS[normalized] || cleaned || 'unité(s)';
+}
+
+function pluraliserUnite(unit, quantity) {
+  if (!(quantity > 1)) return unit;
+  return UNIT_PLURALS[unit] || unit;
 }
 
 function estProduitSensibleOuAmbigu(item) {
