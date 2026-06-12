@@ -2,10 +2,11 @@
 // Analyse d'un ticket de caisse via Google Gemini.
 
 import { z } from 'zod';
+import { estimerDLCString } from './dlc_estimees';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent';
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
 
 const MAX_IMAGE_WIDTH = 1600;
 const JPEG_QUALITY = 0.85;
@@ -222,6 +223,9 @@ function validerReponseTicket(text) {
 }
 
 function normaliserItemTicket(item) {
+  const dateExpiration = estimerDLCString(item.name, item.category);
+  const sensitive = estProduitSensibleOuAmbigu(item);
+
   return {
     raw_label: item.raw_label,
     nom: item.name,
@@ -231,16 +235,47 @@ function normaliserItemTicket(item) {
     unite: nettoyerUnite(item.unit),
     emplacement: item.suggested_location,
     confidence: item.confidence,
-    selected: item.confidence === 'high',
-    date_expiration: '',
+    selected: item.confidence === 'high' && !sensitive,
+    date_expiration: dateExpiration || '',
+    date_expiration_estimee: Boolean(dateExpiration),
   };
 }
 
+const UNIT_TRANSLATIONS = {
+  bag: 'paquet',
+  bags: 'paquets',
+  pack: 'paquet',
+  packs: 'paquets',
+  can: 'conserve',
+  cans: 'conserves',
+  jar: 'bocal',
+  jars: 'bocaux',
+  bottle: 'bouteille',
+  bottles: 'bouteilles',
+  piece: 'pièce',
+  pieces: 'pièces',
+};
+
 function nettoyerUnite(unit) {
-  return String(unit || '')
+  const cleaned = String(unit || '')
     .replace(/\d+(?:[,.]\d+)?/g, '')
     .replace(/\s+/g, ' ')
-    .trim() || 'unité(s)';
+    .trim();
+  const normalized = cleaned.toLowerCase();
+
+  return UNIT_TRANSLATIONS[normalized] || cleaned || 'unité(s)';
+}
+
+function estProduitSensibleOuAmbigu(item) {
+  const text = normaliserTexte(`${item.raw_label} ${item.name} ${item.category}`);
+  return /\b(alcool|vin|biere|bieres|liqueur|liqueurs|spiritueux)\b/.test(text);
+}
+
+function normaliserTexte(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 async function preparerImageTicket(file) {
