@@ -10,6 +10,8 @@ const WEAK_WORDS = new Set([
   'boites',
   'x4',
   'x6',
+  'x12',
+  'moulu',
 ]);
 
 const TOKEN_ALIASES = {
@@ -33,6 +35,17 @@ const TOKEN_ALIASES = {
   paprika: 'paprika',
   doux: 'doux',
   oreo: 'oreo',
+  cafe: 'cafe',
+  cafes: 'cafe',
+  huile: 'huile',
+  olive: 'olive',
+  olives: 'olive',
+  thon: 'thon',
+  naturel: 'nature',
+  bananes: 'banane',
+  banane: 'banane',
+  cookies: 'cookie',
+  biscuits: 'biscuit',
 };
 
 export function normaliserNomCourses(value) {
@@ -45,7 +58,7 @@ export function matchShoppingItems(receiptItems = [], shoppingItems = []) {
   const unmatchedReceiptItems = [];
 
   receiptItems.forEach((receiptItem, receiptIndex) => {
-    const receiptTokens = tokensNom(receiptItem.raw_label || receiptItem.nom || receiptItem.name);
+    const receiptTokens = tokensNom(receiptItem.nom || receiptItem.name || receiptItem.raw_label);
     let best = null;
 
     shoppingItems.forEach((shoppingItem) => {
@@ -137,7 +150,7 @@ function tokensNom(value) {
 }
 
 function normaliserToken(token) {
-  if (/^x\d+$/.test(token)) return token;
+  if (/^x\d+$/.test(token)) return '';
   return TOKEN_ALIASES[token] || token;
 }
 

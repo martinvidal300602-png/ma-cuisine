@@ -46,6 +46,9 @@ Pas de commentaire.
 Le JSON doit toujours respecter exactement la structure attendue :
 {"items":[{"raw_label":"string","name":"string","brand":"string|null","category":"Viandes & Poissons|Légumes & Fruits|Produits laitiers|Conserves & Épicerie|Surgelés|Céréales & Pâtes|Condiments & Sauces|Boissons|Boulangerie|Entretien & Ménage|Hygiène & Salle de bain|Papeterie & Divers maison|Animaux|Autre","quantity":1,"unit":"string","suggested_location":"Frigo|Placard sous fenêtre|Plan de travail|Placard épices","confidence":"high|medium|low"}],"uncertain_items":[{"raw_label":"string","reason":"string"}]}
 Lis uniquement les lignes correspondant à des produits achetés, y compris les produits non alimentaires du foyer.
+Extrais toutes les lignes produits, y compris les biscuits/snacks comme Oreo.
+N'ignore pas une ligne produit courte si elle a un prix.
+Ne confonds pas une ligne produit avec une promotion ou un total.
 Ignore total, sous-total, TVA, carte bancaire, CB, rendu monnaie, fidélité, date, magasin, promotions non alimentaires, remises.
 Si plusieurs images sont fournies, ce sont différentes parties du même ticket de caisse.
 Reconstitue mentalement le ticket complet.
@@ -82,6 +85,12 @@ Exemples d’abréviations :
 - EPONGES → éponges, Entretien & Ménage, Placard sous fenêtre
 - SOPALIN → sopalin, Papeterie & Divers maison, Placard sous fenêtre
 - PAPIER TOILETTE → papier toilette, Hygiène & Salle de bain, Placard sous fenêtre
+- OREO ORIGINAL 2 → Oreo original, Boulangerie, quantity 2, unit paquets
+- SAUCE TOMATE BARILLA 3 → sauce tomate Barilla, Condiments & Sauces, quantity 3, unit bocaux
+- THON NATURE BOITE X3 → thon nature, Conserves & Épicerie, quantity 3, unit boîtes
+- OEUFS X12 → œufs, Autre, quantity 12, unit pièces
+- EAU GAZ 1.5L 6 → eau gazeuse, Boissons, quantity 6, unit bouteilles
+- LESSIVE CAPS X30 → lessive caps, Entretien & Ménage, quantity 30, unit capsules
 
 Si tu n’es pas sûr, mets confidence low.
 Si une ligne est incertaine, mets-la dans uncertain_items.
@@ -360,18 +369,25 @@ function dedupliquerItemsTicket(items) {
 }
 
 function itemsTicketProches(first, second) {
+  if (!unitesCategoriesCompatibles(first, second)) return false;
+
   const firstKey = cleDoublonTicket(first);
   const secondKey = cleDoublonTicket(second);
   if (!firstKey || !secondKey) return false;
   if (firstKey === secondKey) return true;
-  if (firstKey.includes(secondKey) || secondKey.includes(firstKey)) return true;
 
   const firstTokens = firstKey.split(' ');
   const secondTokens = secondKey.split(' ');
+  if (contientDifferenceBloquante(firstTokens, secondTokens)) return false;
+
+  if (firstKey.includes(secondKey) || secondKey.includes(firstKey)) {
+    return Math.min(firstTokens.length, secondTokens.length) >= 2;
+  }
+
   const shorter = firstTokens.length <= secondTokens.length ? firstTokens : secondTokens;
   const longer = firstTokens.length > secondTokens.length ? firstTokens : secondTokens;
   const common = shorter.filter((token) => longer.includes(token));
-  return shorter.length > 0 && common.length / shorter.length >= 0.8;
+  return shorter.length >= 2 && common.length / shorter.length >= 0.85;
 }
 
 function cleDoublonTicket(item) {
@@ -380,6 +396,26 @@ function cleDoublonTicket(item) {
     .replace(/\b\d+(?:\.\d{2})?\b/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function unitesCategoriesCompatibles(first, second) {
+  if (first.category && second.category && first.category !== second.category) return false;
+  const firstUnit = nettoyerUnite(first.unit);
+  const secondUnit = nettoyerUnite(second.unit);
+  return !firstUnit || !secondUnit || firstUnit === secondUnit;
+}
+
+function contientDifferenceBloquante(firstTokens, secondTokens) {
+  const blockers = [
+    ['entier', 'demi'],
+    ['sauce', 'coulis'],
+    ['oreo', 'biscuit'],
+    ['lait', 'yaourt'],
+  ];
+  return blockers.some(([a, b]) => (
+    (firstTokens.includes(a) && secondTokens.includes(b)) ||
+    (firstTokens.includes(b) && secondTokens.includes(a))
+  ));
 }
 
 function fusionnerItemsTicket(first, second) {
@@ -418,7 +454,7 @@ function normaliserItemTicket(item) {
   const dateExpiration = categorieSansDLC(categorie) ? null : estimerDLCString(item.name, categorie, 'ticket');
   const sensitive = estProduitSensibleOuAmbigu(item);
   const quantite = extraireQuantiteTicket(item) ?? normaliserQuantiteGemini(item.quantity);
-  const unite = pluraliserUnite(nettoyerUnite(item.unit), quantite);
+  const unite = pluraliserUnite(infererUniteTicket(item, quantite), quantite);
 
   return {
     raw_label: item.raw_label,
@@ -440,8 +476,14 @@ function normaliserQuantiteGemini(quantity) {
 }
 
 function extraireQuantiteTicket(item) {
-  const raw = String(item.raw_label || '').trim();
+  const raw = String(`${item.raw_label || ''} ${item.name || ''}`).trim();
   if (!raw) return null;
+
+  const xMatch = raw.match(/\b[xX]\s?(\d{1,3})\b|\b(\d{1,3})\s?[xX]\b/);
+  if (xMatch) {
+    const quantity = Number(xMatch[1] || xMatch[2]);
+    if (Number.isInteger(quantity) && quantity > 1 && quantity <= 99) return quantity;
+  }
 
   const tokens = raw.match(/\S+/g) || [];
   if (tokens.length < 3) return null;
@@ -482,6 +524,41 @@ function corrigerCategorieTicket(category, name) {
   return category;
 }
 
+function infererUniteTicket(item, quantity) {
+  const text = normaliserTexte(`${item.raw_label || ''} ${item.name || ''} ${item.unit || ''}`);
+
+  if (/\b(sauce tomate|pesto|olives?|cornichons?)\b/.test(text)) return 'bocal';
+  if (/\b(confiture|miel|moutarde)\b/.test(text)) return 'pot';
+  if (/\b(thon|sardines?|boite|boites)\b/.test(text)) return 'boîte';
+  if (/\b(mais|haricots rouges|petits pois)\b/.test(text)) return 'conserve';
+  if (/\b(oreo|biscuits?|cookies?)\b/.test(text)) return 'paquet';
+  if (/\b(pates|spaghetti|riz|farine|sucre|cereales)\b/.test(text) && !poidsDansLibelle(text)) return 'paquet';
+  if (/\b(oeufs?|oeuf)\b/.test(text)) return 'pièce';
+  if (/\b(jambon)\b/.test(text)) return /\b(tr|tranche|tranches)\b/.test(text) ? 'tranche' : 'pièce';
+  if (/\b(saumon fume|saumon fumé)\b/.test(text) && /\b\d+\s?tr\b/.test(text)) return 'tranche';
+  if (/\blessive caps?\b|\bcapsules?\b|\bcaps\b/.test(text)) return 'capsule';
+  if (/\beponges?\b/.test(text)) return 'pièce';
+  if (/\bsopalin\b|\bpapier toilette\b/.test(text)) return 'rouleau';
+  if (/\b(biere|bieres)\b/.test(text)) return /\b(canette|canettes)\b/.test(text) ? 'canette' : 'bouteille';
+  if (/\b(eau|eau gaz|eau gazeuse)\b/.test(text) && quantity > 1) return 'bouteille';
+  if (/\b(vin|huile)\b/.test(text)) return 'bouteille';
+  if (/\b(sauce soja)\b/.test(text)) return unitePhysiqueDepuisLibelle(text) || 'ml';
+  if (/\b(glace)\b/.test(text)) return unitePhysiqueDepuisLibelle(text) || 'L';
+  if (/\b(frites?|cerises?)\b/.test(text)) return unitePhysiqueDepuisLibelle(text) || nettoyerUnite(item.unit);
+
+  return nettoyerUnite(item.unit);
+}
+
+function poidsDansLibelle(text) {
+  return /\b\d+(?:[,.]\d+)?\s?(g|kg)\b/i.test(text);
+}
+
+function unitePhysiqueDepuisLibelle(text) {
+  const match = text.match(/\b\d+(?:[,.]\d+)?\s?(kg|g|ml|cl|l)\b/i);
+  if (!match) return null;
+  return match[1] === 'l' ? 'L' : match[1].toLowerCase();
+}
+
 const UNIT_TRANSLATIONS = {
   bag: 'paquet',
   bags: 'paquets',
@@ -519,6 +596,8 @@ const UNIT_PLURALS = {
   rouleau: 'rouleaux',
   éponge: 'éponges',
   eponge: 'éponges',
+  conserve: 'conserves',
+  canette: 'canettes',
 };
 
 function nettoyerUnite(unit) {
