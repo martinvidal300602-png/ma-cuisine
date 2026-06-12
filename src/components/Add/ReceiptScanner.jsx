@@ -78,7 +78,10 @@ export default function ReceiptScanner({
         );
       }
     } catch (err) {
-      setError(err.message || "L'analyse du ticket a échoué.");
+      const message = err.message?.includes("JSON")
+        ? 'Impossible de lire le ticket complet. Essayez avec des photos plus nettes ou moins inclinées.'
+        : err.message || "L'analyse du ticket a échoué.";
+      setError(message);
     } finally {
       setAnalyzing(false);
     }

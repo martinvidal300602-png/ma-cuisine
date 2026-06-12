@@ -33,8 +33,15 @@ export const RECEIPT_LOCATIONS = [
 ];
 
 const PROMPT = `Tu es un système d’extraction de produits depuis un ticket de caisse français.
+Réponds uniquement avec un JSON brut valide.
+Aucun markdown.
+Aucun texte avant ou après le JSON.
+Pas de \`\`\`json.
+Pas de commentaire.
+Le JSON doit toujours respecter exactement la structure attendue :
+{"items":[{"raw_label":"string","name":"string","brand":"string|null","category":"Viandes & Poissons|Légumes & Fruits|Produits laitiers|Conserves & Épicerie|Surgelés|Céréales & Pâtes|Condiments & Sauces|Boissons|Boulangerie|Autre","quantity":1,"unit":"string","suggested_location":"Frigo|Placard sous fenêtre|Plan de travail|Placard épices","confidence":"high|medium|low"}],"uncertain_items":[{"raw_label":"string","reason":"string"}]}
 Lis uniquement les lignes correspondant à des produits achetés.
-Ignore total, sous-total, TVA, carte bancaire, rendu monnaie, fidélité, date, magasin, promotions non alimentaires.
+Ignore total, sous-total, TVA, carte bancaire, CB, rendu monnaie, fidélité, date, magasin, promotions non alimentaires, remises.
 Si plusieurs images sont fournies, ce sont différentes parties du même ticket de caisse.
 Reconstitue mentalement le ticket complet.
 Ignore les doublons éventuels entre deux images qui se chevauchent.
@@ -62,7 +69,16 @@ Exemples d’abréviations :
 - PAPRIKA → paprika, Condiments & Sauces, Placard épices
 
 Si tu n’es pas sûr, mets confidence low.
-Retourne uniquement le JSON demandé.`;
+Si une ligne est incertaine, mets-la dans uncertain_items.
+Retourne uniquement le JSON demandé, sans balise markdown.`;
+
+class GeminiJsonParseError extends Error {
+  constructor(message, rawText = '') {
+    super(message);
+    this.name = 'GeminiJsonParseError';
+    this.rawText = rawText;
+  }
+}
 
 const ReceiptItemSchema = z
   .object({
@@ -154,14 +170,45 @@ export async function analyserTicketCaisse(input) {
   }
 
   const images = await Promise.all(cleanFiles.map(preparerImageTicket));
-  const text = await appelerGeminiTicket(images);
-  const parsed = validerReponseTicket(text);
+  const parsed = await analyserImagesTicketAvecFallback(images);
   const items = dedupliquerItemsTicket(parsed.items);
 
   return {
     items: items.map(normaliserItemTicket),
     uncertain_items: parsed.uncertain_items,
   };
+}
+
+async function analyserImagesTicketAvecFallback(images) {
+  try {
+    const text = await appelerGeminiTicket(images);
+    return validerReponseTicket(text);
+  } catch (err) {
+    if (!(err instanceof GeminiJsonParseError) || images.length <= 1) {
+      throw err;
+    }
+
+    const partialResults = [];
+    for (const image of images) {
+      try {
+        const text = await appelerGeminiTicket([image]);
+        partialResults.push(validerReponseTicket(text));
+      } catch (imageErr) {
+        if (import.meta.env.DEV) {
+          console.warn('[receipt-gemini] échec fallback image ticket', imageErr);
+        }
+      }
+    }
+
+    if (partialResults.length === 0) {
+      throw new Error('Impossible de lire le ticket complet. Essayez avec des photos plus nettes ou moins inclinées.');
+    }
+
+    return {
+      items: dedupliquerItemsTicket(partialResults.flatMap((result) => result.items)),
+      uncertain_items: partialResults.flatMap((result) => result.uncertain_items),
+    };
+  }
 }
 
 async function appelerGeminiTicket(images) {
@@ -223,12 +270,7 @@ async function appelerGeminiTicket(images) {
 }
 
 function validerReponseTicket(text) {
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    throw new Error("La réponse de Gemini n'est pas un JSON valide. Réessayez avec une photo plus nette.");
-  }
+  const parsed = parseGeminiJsonResponse(text);
 
   const result = ReceiptResponseSchema.safeParse(parsed);
   if (!result.success) {
@@ -236,6 +278,54 @@ function validerReponseTicket(text) {
   }
 
   return result.data;
+}
+
+function parseGeminiJsonResponse(text) {
+  const raw = String(text || '');
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const direct = tryParseJson(cleaned);
+  if (direct.ok) return direct.value;
+
+  const objectBlock = extractJsonBlock(cleaned, '{', '}');
+  if (objectBlock) {
+    const parsed = tryParseJson(objectBlock);
+    if (parsed.ok) return parsed.value;
+  }
+
+  const arrayBlock = extractJsonBlock(cleaned, '[', ']');
+  if (arrayBlock) {
+    const parsed = tryParseJson(arrayBlock);
+    if (parsed.ok) return parsed.value;
+  }
+
+  if (import.meta.env.DEV) {
+    console.warn('[receipt-gemini] JSON invalide, extrait brut:', raw.slice(0, 500));
+  }
+
+  throw new GeminiJsonParseError(
+    "La réponse de Gemini n'est pas un JSON valide.",
+    raw
+  );
+}
+
+function tryParseJson(value) {
+  try {
+    return { ok: true, value: JSON.parse(value) };
+  } catch (err) {
+    return { ok: false };
+  }
+}
+
+function extractJsonBlock(text, openChar, closeChar) {
+  const start = text.indexOf(openChar);
+  const end = text.lastIndexOf(closeChar);
+  if (start === -1 || end === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
 }
 
 function dedupliquerItemsTicket(items) {
