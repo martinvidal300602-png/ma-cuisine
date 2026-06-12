@@ -571,16 +571,88 @@ function normaliser(texte) {
     .trim();
 }
 
+function joursContextuels(nomNormalise, categorie, source) {
+  const isNeuf =
+    source === "ticket" ||
+    source === "code_barres" ||
+    source === "photo_placard";
+
+  if (isNeuf) {
+    if (
+      nomNormalise.includes("sauce tomate") ||
+      nomNormalise.includes("sauce en bocal") ||
+      nomNormalise.includes("conserve") ||
+      nomNormalise.includes("bocal") ||
+      categorie === "Conserves & Épicerie"
+    ) {
+      return 365;
+    }
+
+    if (
+      nomNormalise.includes("pates") ||
+      nomNormalise.includes("pâtes") ||
+      nomNormalise.includes("riz") ||
+      nomNormalise.includes("cereales") ||
+      nomNormalise.includes("céréales") ||
+      categorie === "Céréales & Pâtes"
+    ) {
+      return 730;
+    }
+
+    if (
+      nomNormalise.includes("oreo") ||
+      nomNormalise.includes("biscuit") ||
+      nomNormalise.includes("biscuits") ||
+      nomNormalise.includes("cookie") ||
+      nomNormalise.includes("cookies")
+    ) {
+      return 180;
+    }
+
+    if (
+      nomNormalise.includes("paprika") ||
+      nomNormalise.includes("epice") ||
+      nomNormalise.includes("épice") ||
+      nomNormalise.includes("epices") ||
+      nomNormalise.includes("épices")
+    ) {
+      return 730;
+    }
+
+    if (
+      nomNormalise === "eau" ||
+      nomNormalise.includes("eau ") ||
+      nomNormalise.includes("soda")
+    ) {
+      return 365;
+    }
+  }
+
+  if (source === "photo_frigo" && nomNormalise.includes("sauce tomate")) {
+    return 5;
+  }
+
+  return null;
+}
+
 // ─── Fonction principale ────────────────────────────────────────────────────
 /**
  * Estime une date d'expiration à partir du nom du produit et/ou de sa catégorie.
  *
  * @param {string} nomProduit - Nom du produit (ex: "Yaourt nature Danone")
  * @param {string} [categorie] - Catégorie SQL (ex: "Produits laitiers")
+ * @param {"photo_frigo"|"photo_placard"|"ticket"|"code_barres"|"manuel"} [source]
  * @returns {Date|null} Date estimée, ou null si aucune correspondance
  */
-export function estimerDLC(nomProduit, categorie = null) {
+export function estimerDLC(nomProduit, categorie = null, source = "manuel") {
   const nomNormalise = normaliser(nomProduit);
+  const joursPrioritaires = joursContextuels(nomNormalise, categorie, source);
+
+  if (joursPrioritaires !== null) {
+    const date = new Date();
+    date.setDate(date.getDate() + joursPrioritaires);
+    return date;
+  }
 
   // 1. Cherche le mot-clé le plus long qui correspond dans le nom
   let meilleurMatch = null;
@@ -629,9 +701,10 @@ export function formatDateISO(date) {
  *
  * @param {string} nomProduit
  * @param {string} [categorie]
+ * @param {"photo_frigo"|"photo_placard"|"ticket"|"code_barres"|"manuel"} [source]
  * @returns {string|null}
  */
-export function estimerDLCString(nomProduit, categorie = null) {
-  const date = estimerDLC(nomProduit, categorie);
+export function estimerDLCString(nomProduit, categorie = null, source = "manuel") {
+  const date = estimerDLC(nomProduit, categorie, source);
   return date ? formatDateISO(date) : null;
 }

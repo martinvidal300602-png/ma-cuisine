@@ -223,14 +223,15 @@ function validerReponseTicket(text) {
 }
 
 function normaliserItemTicket(item) {
-  const dateExpiration = estimerDLCString(item.name, item.category);
+  const categorie = corrigerCategorieTicket(item.category, item.name);
+  const dateExpiration = estimerDLCString(item.name, categorie, 'ticket');
   const sensitive = estProduitSensibleOuAmbigu(item);
 
   return {
     raw_label: item.raw_label,
     nom: item.name,
     marque: item.brand || '',
-    categorie: item.category,
+    categorie,
     quantite: Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1,
     unite: nettoyerUnite(item.unit),
     emplacement: item.suggested_location,
@@ -239,6 +240,13 @@ function normaliserItemTicket(item) {
     date_expiration: dateExpiration || '',
     date_expiration_estimee: Boolean(dateExpiration),
   };
+}
+
+function corrigerCategorieTicket(category, name) {
+  const normalized = normaliserTexte(name);
+  if (normalized.includes('sauce tomate')) return 'Condiments & Sauces';
+  if (/\b(oreo|biscuit|biscuits|cookie|cookies)\b/.test(normalized)) return 'Boulangerie';
+  return category;
 }
 
 const UNIT_TRANSLATIONS = {

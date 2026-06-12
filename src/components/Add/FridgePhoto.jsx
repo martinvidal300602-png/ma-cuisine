@@ -64,12 +64,15 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
 
       setDetected(
         produits.map((p) =>
-          appliquerDateExpirationEstimee({
-            ...p,
-            categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
-            emplacement,
-            date_expiration: '',
-          })
+          appliquerDateExpirationEstimee(
+            {
+              ...p,
+              categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
+              emplacement,
+              date_expiration: '',
+            },
+            emplacement === 'Frigo' ? 'photo_frigo' : 'photo_placard'
+          )
         )
       );
       logPhotoDebug('items détectés', produits);

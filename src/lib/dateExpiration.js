@@ -1,7 +1,7 @@
 // src/lib/dateExpiration.js
 import { estimerDLCString } from './dlc_estimees';
 
-export function appliquerDateExpirationEstimee(product) {
+export function appliquerDateExpirationEstimee(product, source = 'manuel') {
   if (product.date_expiration) {
     return {
       ...product,
@@ -9,7 +9,7 @@ export function appliquerDateExpirationEstimee(product) {
     };
   }
 
-  const estimate = estimerDLCString(product.nom, product.categorie);
+  const estimate = estimerDLCString(product.nom, product.categorie, source);
   if (!estimate) {
     return {
       ...product,

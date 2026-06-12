@@ -36,12 +36,15 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
       const result = await analyserTicketCaisse(file);
       setItems(
         result.items.map((item) =>
-          appliquerDateExpirationEstimee({
-            ...item,
-            categorie: CATEGORIES.includes(item.categorie) ? item.categorie : 'Autre',
-            emplacement: normaliserEmplacement(item.emplacement),
-            selected: item.confidence === 'high',
-          })
+          appliquerDateExpirationEstimee(
+            {
+              ...item,
+              categorie: CATEGORIES.includes(item.categorie) ? item.categorie : 'Autre',
+              emplacement: normaliserEmplacement(item.emplacement),
+              selected: item.confidence === 'high',
+            },
+            'ticket'
+          )
         )
       );
       setUncertain(result.uncertain_items);

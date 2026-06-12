@@ -61,11 +61,12 @@ const DEFAUT = {
  * Formulaire de saisie manuelle. Peut être pré-rempli (scan code-barres) via `initial`.
  */
 export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajouter le produit' }) {
+  const estimationSource = initial.code_barres ? 'code_barres' : 'manuel';
   const initialForm = appliquerDateExpirationEstimee({
     ...DEFAUT,
     ...initial,
     emplacement: normaliserEmplacement(initial.emplacement || DEFAUT.emplacement),
-  });
+  }, estimationSource);
   const [form, setForm] = useState(initialForm);
   const [dateEstimated, setDateEstimated] = useState(Boolean(initialForm.date_expiration_estimee));
   const [dateEditedManually, setDateEditedManually] = useState(false);
@@ -87,11 +88,14 @@ export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajou
     if (dateEditedManually) return;
     if (form.date_expiration && !dateEstimated) return;
 
-    const withEstimate = appliquerDateExpirationEstimee({
-      ...form,
-      date_expiration: '',
-      date_expiration_estimee: false,
-    });
+    const withEstimate = appliquerDateExpirationEstimee(
+      {
+        ...form,
+        date_expiration: '',
+        date_expiration_estimee: false,
+      },
+      estimationSource
+    );
 
     if (!withEstimate.date_expiration) return;
     if (withEstimate.date_expiration === form.date_expiration) return;
