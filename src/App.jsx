@@ -63,6 +63,8 @@ function AppConnectee({ user, signOut, tab, setTab }) {
             addProducts={addProducts}
             products={products}
             updateProduct={updateProduct}
+            shopping={shopping}
+            shoppingSession={shoppingSession}
             userEmail={user?.email}
           />
         )}

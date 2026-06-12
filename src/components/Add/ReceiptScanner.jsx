@@ -4,8 +4,16 @@ import Button from '../UI/Button';
 import { analyserTicketCaisse } from '../../lib/receiptGemini';
 import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
 import { CATEGORIES, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
+import ReceiptShoppingReconciliation from '../Shopping/ReceiptShoppingReconciliation';
 
-export default function ReceiptScanner({ onSubmitMany, userEmail }) {
+export default function ReceiptScanner({
+  onSubmitMany,
+  shoppingItems = [],
+  deleteShoppingItems,
+  activeShoppingSession,
+  finishShoppingSession,
+  userEmail,
+}) {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -79,9 +87,10 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
 
   const selectedCount = items.filter((item) => item.selected).length;
 
-  const handleAddSelected = async () => {
-    const payload = items
-      .filter((item) => item.selected && item.nom.trim())
+  const buildPayload = (indexes) => {
+    const selectedIndexes = new Set(indexes);
+    return items
+      .filter((item, index) => selectedIndexes.has(index) && item.nom.trim())
       .map((item) => {
         const quantite = Number(item.quantite);
 
@@ -99,6 +108,20 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
           ajoute_par: userEmail ?? null,
         };
       });
+  };
+
+  const resetAfterSuccess = () => {
+    setItems([]);
+    setUncertain([]);
+    setFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setDone(true);
+  };
+
+  const handleAddSelected = async () => {
+    const indexes = items.map((item, index) => (item.selected ? index : null)).filter((index) => index !== null);
+    const payload = buildPayload(indexes);
 
     if (payload.length === 0) {
       setError('Sélectionnez au moins un produit avec un nom.');
@@ -109,14 +132,44 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
     setError(null);
     try {
       await onSubmitMany(payload);
-      setItems([]);
-      setUncertain([]);
-      setFile(null);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-      setDone(true);
+      resetAfterSuccess();
     } catch (err) {
       setError(err.message || "L'ajout a échoué.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleReconciliationConfirm = async ({
+    selectedReceiptIndexes,
+    shoppingIdsToDelete,
+    finishSession,
+  }) => {
+    const payload = buildPayload(selectedReceiptIndexes);
+
+    if (payload.length === 0) {
+      setError('Sélectionnez au moins un produit avec un nom.');
+      return;
+    }
+
+    setAdding(true);
+    setError(null);
+    try {
+      await onSubmitMany(payload);
+
+      if (shoppingIdsToDelete.length > 0) {
+        if (!deleteShoppingItems) throw new Error('Suppression de la liste courses indisponible.');
+        await deleteShoppingItems(shoppingIdsToDelete);
+      }
+
+      if (finishSession && activeShoppingSession) {
+        if (!finishShoppingSession) throw new Error('Fin de session courses indisponible.');
+        await finishShoppingSession();
+      }
+
+      resetAfterSuccess();
+    } catch (err) {
+      setError(err.message || "La validation du ticket a échoué.");
     } finally {
       setAdding(false);
     }
@@ -201,7 +254,17 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
             </section>
           )}
 
-          {items.length > 0 && (
+          {items.length > 0 && shoppingItems.length > 0 && (
+            <ReceiptShoppingReconciliation
+              receiptItems={items}
+              shoppingItems={shoppingItems}
+              activeSession={activeShoppingSession}
+              adding={adding}
+              onConfirm={handleReconciliationConfirm}
+            />
+          )}
+
+          {items.length > 0 && shoppingItems.length === 0 && (
             <Button size="lg" onClick={handleAddSelected} disabled={adding || selectedCount === 0}>
               {adding
                 ? 'Ajout en cours…'

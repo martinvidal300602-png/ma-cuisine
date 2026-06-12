@@ -78,6 +78,18 @@ export function useShoppingList() {
     [fetchItems]
   );
 
+  const deleteItems = useCallback(
+    async (ids) => {
+      const cleanIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+      if (cleanIds.length === 0) return;
+
+      const { error: err } = await supabase.from('courses').delete().in('id', cleanIds);
+      if (err) throw new Error('Suppression de la liste impossible : ' + err.message);
+      await fetchItems();
+    },
+    [fetchItems]
+  );
+
   const clearChecked = useCallback(async () => {
     const { error: err } = await supabase.from('courses').delete().eq('coche', true);
     if (err) throw new Error('Suppression des produits cochés impossible : ' + err.message);
@@ -92,6 +104,7 @@ export function useShoppingList() {
     addItem,
     updateItem,
     deleteItem,
+    deleteItems,
     clearChecked,
   };
 }

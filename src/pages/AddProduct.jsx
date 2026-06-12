@@ -18,7 +18,15 @@ const TITRES = {
 /**
  * Page Ajouter : menu de 3 modes (photo / code-barres / manuel).
  */
-export default function AddProduct({ addProduct, addProducts, products, updateProduct, userEmail }) {
+export default function AddProduct({
+  addProduct,
+  addProducts,
+  products,
+  updateProduct,
+  shopping,
+  shoppingSession,
+  userEmail,
+}) {
   const [mode, setMode] = useState(null);
   const [pendingDuplicates, setPendingDuplicates] = useState(null);
   const pendingResolveRef = useRef(null);
@@ -119,7 +127,16 @@ export default function AddProduct({ addProduct, addProducts, products, updatePr
       {!mode && <AddMenu onSelect={setMode} />}
       {mode === 'photo' && <FridgePhoto onSubmitMany={handleAddMany} userEmail={userEmail} />}
       {mode === 'barcode' && <BarcodeScanner onSubmit={handleAddOne} />}
-      {mode === 'receipt' && <ReceiptScanner onSubmitMany={handleAddMany} userEmail={userEmail} />}
+      {mode === 'receipt' && (
+        <ReceiptScanner
+          onSubmitMany={handleAddMany}
+          shoppingItems={shopping?.items ?? []}
+          deleteShoppingItems={shopping?.deleteItems}
+          activeShoppingSession={shoppingSession?.activeSession}
+          finishShoppingSession={shoppingSession?.finishSession}
+          userEmail={userEmail}
+        />
+      )}
       {mode === 'manual' && (
         <div className="bg-card rounded-card border border-border p-4">
           <ManualForm onSubmit={handleAddOne} />
