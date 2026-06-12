@@ -2,11 +2,14 @@
 import { useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useProducts } from './hooks/useProducts';
+import { useShoppingList } from './hooks/useShoppingList';
+import { useShoppingSession } from './hooks/useShoppingSession';
 import { useAlerts } from './hooks/useAlerts';
 import LoginForm from './components/Auth/LoginForm';
 import BottomNav from './components/UI/BottomNav';
 import Home from './pages/Home';
 import AddProduct from './pages/AddProduct';
+import ShoppingList from './pages/ShoppingList';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
 
@@ -37,6 +40,8 @@ export default function App() {
 function AppConnectee({ user, signOut, tab, setTab }) {
   const { products, loading, error, addProduct, addProducts, updateProduct, deleteProduct } =
     useProducts();
+  const shopping = useShoppingList();
+  const shoppingSession = useShoppingSession();
   const { perimes, expirentBientot, cetteSemaine, alertCount } = useAlerts(products);
 
   return (
@@ -49,6 +54,7 @@ function AppConnectee({ user, signOut, tab, setTab }) {
             error={error}
             updateProduct={updateProduct}
             deleteProduct={deleteProduct}
+            addShoppingItem={(item) => shopping.addItem({ ...item, ajoute_par: user?.email ?? null })}
           />
         )}
         {tab === 'ajouter' && (
@@ -66,6 +72,13 @@ function AppConnectee({ user, signOut, tab, setTab }) {
             expirentBientot={expirentBientot}
             cetteSemaine={cetteSemaine}
             loading={loading}
+          />
+        )}
+        {tab === 'courses' && (
+          <ShoppingList
+            shopping={shopping}
+            session={shoppingSession}
+            userEmail={user?.email}
           />
         )}
         {tab === 'reglages' && <Settings userEmail={user?.email} onSignOut={signOut} />}

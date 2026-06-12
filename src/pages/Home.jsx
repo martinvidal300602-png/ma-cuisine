@@ -4,7 +4,7 @@ import ProductList from '../components/Inventory/ProductList';
 /**
  * Page Stock : liste temps réel de tous les produits.
  */
-export default function Home({ products, loading, error, updateProduct, deleteProduct }) {
+export default function Home({ products, loading, error, updateProduct, deleteProduct, addShoppingItem }) {
   const handleUpdateQuantity = (id, quantite) => updateProduct(id, { quantite });
 
   return (
@@ -21,6 +21,7 @@ export default function Home({ products, loading, error, updateProduct, deletePr
         error={error}
         onUpdateQuantity={handleUpdateQuantity}
         onDelete={deleteProduct}
+        onAddShoppingItem={addShoppingItem}
       />
     </div>
   );

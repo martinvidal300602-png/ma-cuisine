@@ -1,12 +1,13 @@
 // src/components/UI/BottomNav.jsx
 /**
  * Barre de navigation fixe en bas (64px + safe area iOS).
- * 4 onglets : Stock / Ajouter / Alertes / Réglages.
+ * Onglets principaux : Stock / Ajouter / Courses / Alertes / Réglages.
  * Un badge rouge sur "Alertes" indique le nombre de produits périmés ou expirant sous 3 jours.
  */
 const TABS = [
   { id: 'stock', label: 'Stock', icon: '🧺' },
   { id: 'ajouter', label: 'Ajouter', icon: '➕' },
+  { id: 'courses', label: 'Courses', icon: '🛒' },
   { id: 'alertes', label: 'Alertes', icon: '🔔' },
   { id: 'reglages', label: 'Réglages', icon: '⚙️' },
 ];
@@ -17,7 +18,7 @@ export default function BottomNav({ active, onChange, alertCount = 0 }) {
       aria-label="Navigation principale"
       className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border pb-safe"
     >
-      <div className="max-w-app mx-auto h-16 grid grid-cols-4">
+      <div className="max-w-app mx-auto h-16 grid grid-cols-5">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
           return (

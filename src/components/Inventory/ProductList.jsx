@@ -6,7 +6,7 @@ import ProductCard from './ProductCard';
 /**
  * Liste filtrable des produits, triés par date d'expiration croissante (tri fait côté requête).
  */
-export default function ProductList({ products, loading, error, onUpdateQuantity, onDelete }) {
+export default function ProductList({ products, loading, error, onUpdateQuantity, onDelete, onAddShoppingItem }) {
   const [search, setSearch] = useState('');
   const [categorie, setCategorie] = useState('');
   const [emplacement, setEmplacement] = useState('');
@@ -55,7 +55,13 @@ export default function ProductList({ products, loading, error, onUpdateQuantity
       )}
 
       {filtered.map((p) => (
-        <ProductCard key={p.id} product={p} onUpdateQuantity={onUpdateQuantity} onDelete={onDelete} />
+        <ProductCard
+          key={p.id}
+          product={p}
+          onUpdateQuantity={onUpdateQuantity}
+          onDelete={onDelete}
+          onAddShoppingItem={onAddShoppingItem}
+        />
       ))}
     </div>
   );

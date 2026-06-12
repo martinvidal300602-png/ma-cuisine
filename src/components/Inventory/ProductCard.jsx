@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Badge from '../UI/Badge';
 import { joursRestants } from '../../hooks/useAlerts';
+import AddToListButton from '../Shopping/AddToListButton';
 
 // Placeholder emoji par catégorie quand le produit n'a pas de photo
 const EMOJIS = {
@@ -26,7 +27,7 @@ function badgeExpiration(dateExpiration) {
   return { variant: 'ok', label: `${jours} j restants` };
 }
 
-export default function ProductCard({ product, onUpdateQuantity, onDelete }) {
+export default function ProductCard({ product, onUpdateQuantity, onDelete, onAddShoppingItem }) {
   const [editingQty, setEditingQty] = useState(false);
   const [qtyValue, setQtyValue] = useState(product.quantite);
   const [busy, setBusy] = useState(false);
@@ -138,6 +139,12 @@ export default function ProductCard({ product, onUpdateQuantity, onDelete }) {
             🗑️
           </button>
         </div>
+
+        {onAddShoppingItem && (
+          <div className="mt-2">
+            <AddToListButton product={product} onAdd={onAddShoppingItem} />
+          </div>
+        )}
 
         {error && (
           <p role="alert" className="text-danger text-xs mt-1">
