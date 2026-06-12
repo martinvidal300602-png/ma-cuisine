@@ -67,6 +67,12 @@ Ne devine pas le contenu des sacs opaques.
 Si un objet est partiellement caché, confidence = low ou medium.
 Si tu n'es pas sûr, mets l'objet dans uncertain_items.
 Ne confonds pas marque et aliment.
+Ne crée jamais un produit à partir d'une mention générique d'emballage, marketing, réglementaire ou d'origine.
+Ignore les mentions "lait origine France", "origine France", "fabriqué en France", "bio", "nutriscore", "sans conservateur", "riche en calcium", "pur porc", "source de fibres".
+Pour identifier un produit emballé, il faut un nom produit clair, pas seulement un label, une origine, une allégation ou une liste d'ingrédients.
+Si seul un label générique est visible, mets-le dans uncertain_items au lieu de créer un produit.
+Ne crée pas un produit "lait" à partir d'une mention "lait origine France" ou d'une mention d'ingrédient.
+Le lait liquide attendu a une unité bouteille, litre, L ou brique; un "lait" en grammes est suspect.
 Regroupe les doublons évidents.
 Ne liste pas les emballages vides.
 Ne liste pas les objets non alimentaires.
@@ -333,11 +339,14 @@ function fusionnerResultats(result, emplacement) {
     });
   });
 
+  const filtered = filtrerFauxPositifsEmballage(items);
+
   return {
-    items_high_confidence: items.filter((item) => item.confidence === 'high'),
-    items_to_verify: items.filter((item) => item.confidence === 'medium'),
+    items_high_confidence: filtered.items.filter((item) => item.confidence === 'high'),
+    items_to_verify: filtered.items.filter((item) => item.confidence === 'medium'),
     uncertain_items: [
-      ...items.filter((item) => item.confidence === 'low'),
+      ...filtered.items.filter((item) => item.confidence === 'low'),
+      ...filtered.uncertain_items,
       ...result.uncertain_items.map((item) => ({
         description: item.description,
         reason: traduireEvidence(item.reason),
@@ -345,6 +354,80 @@ function fusionnerResultats(result, emplacement) {
       })),
     ],
   };
+}
+
+function filtrerFauxPositifsEmballage(items) {
+  const kept = [];
+  const uncertain = [];
+
+  items.forEach((item) => {
+    const reason = raisonFauxPositifEmballage(item);
+    if (!reason) {
+      kept.push(item);
+      return;
+    }
+
+    uncertain.push({
+      description: descriptionIncertaineEmballage(item),
+      reason,
+      kind: 'uncertain',
+    });
+  });
+
+  return {
+    items: kept,
+    uncertain_items: uncertain,
+  };
+}
+
+function raisonFauxPositifEmballage(item) {
+  const name = normaliserNom(item.nom);
+  const unit = normaliserNom(item.unite);
+  const evidence = normaliserNom(item.evidence);
+  const combined = `${name} ${unit} ${evidence}`;
+
+  if (name === 'lait' && (unit === 'g' || unit === 'gramme' || unit === 'grammes')) {
+    return 'Mention de lait avec une unité en grammes, probablement une information d’ingrédient ou d’emballage.';
+  }
+
+  if (name === 'lait' && evidence.includes('lait origine france')) {
+    return 'Mention "lait origine France" détectée sur un emballage, sans nom produit clair.';
+  }
+
+  if (estLabelOrigineOuMarketing(combined) && !contientNomProduitClair(name)) {
+    return 'Mention générique d’origine ou marketing détectée, sans produit identifiable.';
+  }
+
+  return null;
+}
+
+function estLabelOrigineOuMarketing(text) {
+  return [
+    'lait origine france',
+    'origine france',
+    'fabrique en france',
+    'bio',
+    'nutriscore',
+    'sans conservateur',
+    'riche en calcium',
+    'pur porc',
+    'source fibres',
+    'source de fibres',
+  ].some((label) => text.includes(label));
+}
+
+function contientNomProduitClair(name) {
+  if (!name) return false;
+  if (['lait', 'bio', 'origine france', 'fabrique en france', 'pur porc'].includes(name)) return false;
+  return tokensNom(name).length >= 2;
+}
+
+function descriptionIncertaineEmballage(item) {
+  if (normaliserNom(item.nom) === 'lait') {
+    return 'produit laitier emballé partiellement visible';
+  }
+
+  return `${item.nom} partiellement visible`;
 }
 
 function convertirVersProduitUI(item) {

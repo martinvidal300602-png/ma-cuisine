@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Button from '../UI/Button';
 import { analyserTicketCaisse } from '../../lib/receiptGemini';
+import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
 import { CATEGORIES, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 
 export default function ReceiptScanner({ onSubmitMany, userEmail }) {
@@ -34,12 +35,14 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
     try {
       const result = await analyserTicketCaisse(file);
       setItems(
-        result.items.map((item) => ({
-          ...item,
-          categorie: CATEGORIES.includes(item.categorie) ? item.categorie : 'Autre',
-          emplacement: normaliserEmplacement(item.emplacement),
-          selected: item.confidence === 'high',
-        }))
+        result.items.map((item) =>
+          appliquerDateExpirationEstimee({
+            ...item,
+            categorie: CATEGORIES.includes(item.categorie) ? item.categorie : 'Autre',
+            emplacement: normaliserEmplacement(item.emplacement),
+            selected: item.confidence === 'high',
+          })
+        )
       );
       setUncertain(result.uncertain_items);
 
@@ -58,7 +61,17 @@ export default function ReceiptScanner({ onSubmitMany, userEmail }) {
   };
 
   const updateItem = (index, key, value) => {
-    setItems((list) => list.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+    setItems((list) =>
+      list.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              [key]: value,
+              ...(key === 'date_expiration' ? { date_expiration_estimee: false } : {}),
+            }
+          : item
+      )
+    );
   };
 
   const selectedCount = items.filter((item) => item.selected).length;
@@ -290,6 +303,9 @@ function ReceiptItemForm({ item, index, inputClass, updateItem }) {
         className={inputClass}
         aria-label="Date d'expiration"
       />
+      {item.date_expiration_estimee && (
+        <p className="text-xs text-muted">date estimée, à vérifier</p>
+      )}
     </div>
   );
 }

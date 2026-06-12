@@ -1,6 +1,7 @@
 // src/components/Add/ManualForm.jsx
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Button from '../UI/Button';
+import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
 
 export const CATEGORIES = [
   'Viandes & Poissons',
@@ -60,19 +61,48 @@ const DEFAUT = {
  * Formulaire de saisie manuelle. Peut être pré-rempli (scan code-barres) via `initial`.
  */
 export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajouter le produit' }) {
-  const [form, setForm] = useState({
+  const initialForm = appliquerDateExpirationEstimee({
     ...DEFAUT,
     ...initial,
     emplacement: normaliserEmplacement(initial.emplacement || DEFAUT.emplacement),
   });
+  const [form, setForm] = useState(initialForm);
+  const [dateEstimated, setDateEstimated] = useState(Boolean(initialForm.date_expiration_estimee));
+  const [dateEditedManually, setDateEditedManually] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const set = (key) => (e) => {
+    if (key === 'date_expiration') {
+      setDateEstimated(false);
+      setDateEditedManually(true);
+    }
     setForm((f) => ({ ...f, [key]: e.target.value }));
     setSaved(false);
   };
+
+  useEffect(() => {
+    if (!form.nom.trim()) return;
+    if (dateEditedManually) return;
+    if (form.date_expiration && !dateEstimated) return;
+
+    const withEstimate = appliquerDateExpirationEstimee({
+      ...form,
+      date_expiration: '',
+      date_expiration_estimee: false,
+    });
+
+    if (!withEstimate.date_expiration) return;
+    if (withEstimate.date_expiration === form.date_expiration) return;
+
+    setForm((f) => ({
+      ...f,
+      date_expiration: withEstimate.date_expiration,
+      date_expiration_estimee: true,
+    }));
+    setDateEstimated(true);
+  }, [form.nom, form.categorie, dateEstimated, form.date_expiration, dateEditedManually]);
 
   const handleSubmit = async () => {
     if (!form.nom.trim()) {
@@ -101,6 +131,8 @@ export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajou
         code_barres: form.code_barres || null,
       });
       setForm({ ...DEFAUT });
+      setDateEstimated(false);
+      setDateEditedManually(false);
       setSaved(true);
     } catch (err) {
       setError(err.message || "L'ajout a échoué.");
@@ -170,6 +202,9 @@ export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajou
       <label className="block">
         <span className="block text-sm font-medium mb-1">Date d'expiration</span>
         <input type="date" value={form.date_expiration} onChange={set('date_expiration')} className={inputClass} />
+        {dateEstimated && (
+          <span className="block text-xs text-muted mt-1">date estimée, à vérifier</span>
+        )}
       </label>
 
       <label className="block">

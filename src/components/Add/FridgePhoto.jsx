@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Button from '../UI/Button';
 import { analyserPhotoFrigo } from '../../lib/gemini';
+import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
 import { CATEGORIES, DEFAULT_EMPLACEMENT, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 
 const isDev = import.meta.env.DEV;
@@ -62,12 +63,14 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
       }
 
       setDetected(
-        produits.map((p) => ({
-          ...p,
-          categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
-          emplacement,
-          date_expiration: '',
-        }))
+        produits.map((p) =>
+          appliquerDateExpirationEstimee({
+            ...p,
+            categorie: CATEGORIES.includes(p.categorie) ? p.categorie : 'Autre',
+            emplacement,
+            date_expiration: '',
+          })
+        )
       );
       logPhotoDebug('items détectés', produits);
     } catch (err) {
@@ -78,7 +81,17 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
   };
 
   const updateItem = (index, key, value) => {
-    setDetected((list) => list.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+    setDetected((list) =>
+      list.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              [key]: value,
+              ...(key === 'date_expiration' ? { date_expiration_estimee: false } : {}),
+            }
+          : item
+      )
+    );
   };
 
   const selectedCount = detected.filter((d) => d.selected).length;
@@ -353,6 +366,9 @@ function renderDetectedItem(item, index, updateItem, inputClass) {
         className={inputClass}
         aria-label="Date d'expiration"
       />
+      {item.date_expiration_estimee && (
+        <p className="text-xs text-muted">date estimée, à vérifier</p>
+      )}
     </div>
   );
 }
