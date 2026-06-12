@@ -5,7 +5,7 @@ import { joursRestants } from '../../hooks/useAlerts';
 import AddToListButton from '../Shopping/AddToListButton';
 import UseProductModal from './UseProductModal';
 import EmptyProductSheet from './EmptyProductSheet';
-import { estProduitDivisible, estProduitEntier, quantiteConsommation } from '../../lib/productConsumption';
+import { formatQuantite, getConsumeMode, quantiteConsommation } from '../../lib/productConsumption';
 
 // Placeholder emoji par catégorie quand le produit n'a pas de photo
 const EMOJIS = {
@@ -46,9 +46,8 @@ export default function ProductCard({
   const [emptySheetOpen, setEmptySheetOpen] = useState(false);
 
   const badge = badgeExpiration(product.date_expiration);
-  const isWhole = estProduitEntier(product);
-  const isDivisible = estProduitDivisible(product);
-  const useMode = isDivisible ? 'divisible' : 'whole';
+  const consumeMode = getConsumeMode(product);
+  const isCount = consumeMode === 'count';
 
   const commitQty = async () => {
     const rawValue = Number(qtyValue);
@@ -57,7 +56,7 @@ export default function ProductCard({
       setQtyValue(product.quantite);
       return;
     }
-    const value = quantiteConsommation(rawValue, isWhole);
+    const value = quantiteConsommation(rawValue, consumeMode);
     if (value === product.quantite) {
       setQtyValue(product.quantite);
       return;
@@ -65,7 +64,7 @@ export default function ProductCard({
     setBusy(true);
     setError(null);
     try {
-      await onUpdateQuantity(product.id, value, { whole: isWhole });
+      await onUpdateQuantity(product.id, value, { mode: consumeMode });
     } catch (err) {
       setError(err.message);
       setQtyValue(product.quantite);
@@ -97,7 +96,7 @@ export default function ProductCard({
       setError('La quantité doit être un nombre valide.');
       return;
     }
-    const quantity = quantiteConsommation(newQuantity, isWhole);
+    const quantity = quantiteConsommation(newQuantity, consumeMode);
     setUseModalOpen(false);
     if (quantity <= 0) {
       setEmptySheetOpen(true);
@@ -129,7 +128,7 @@ export default function ProductCard({
         priorite: 'normale',
         source: 'stock',
       });
-      await onUpdateQuantity(product.id, 0, { whole: isWhole });
+      await onUpdateQuantity(product.id, 0, { mode: consumeMode });
       setEmptySheetOpen(false);
     } catch (err) {
       setError(err.message || "Impossible d'ajouter ce produit à la liste.");
@@ -221,10 +220,10 @@ export default function ProductCard({
                 setEditingQty(true);
               }}
               disabled={busy}
-              aria-label={`Quantité : ${product.quantite} ${product.unite}. Toucher pour modifier`}
+              aria-label={`Quantité : ${formatQuantite(product.quantite, product.unite)}. Toucher pour modifier`}
               className="font-num text-sm px-2 py-1 rounded bg-accent-light text-accent font-medium"
             >
-              {product.quantite} {product.unite}
+              {formatQuantite(product.quantite, product.unite)}
             </button>
           )}
 
@@ -240,7 +239,7 @@ export default function ProductCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          {isWhole && (
+          {isCount && (
             <button
               type="button"
               onClick={handleDecrement}
@@ -276,7 +275,7 @@ export default function ProductCard({
       {useModalOpen && (
         <UseProductModal
           product={product}
-          mode={useMode}
+          mode={consumeMode}
           onClose={() => setUseModalOpen(false)}
           onConfirm={handleUseConfirm}
         />

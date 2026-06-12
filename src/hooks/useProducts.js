@@ -1,7 +1,7 @@
 // src/hooks/useProducts.js
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { estProduitEntier, quantiteConsommation } from '../lib/productConsumption';
+import { getConsumeMode, quantiteConsommation } from '../lib/productConsumption';
 
 const isDev = import.meta.env.DEV;
 
@@ -98,7 +98,7 @@ export function useProducts() {
 
   const updateProductQuantity = useCallback(
     async (id, newQuantity, options = {}) => {
-      const quantity = quantiteConsommation(newQuantity, options.whole);
+      const quantity = quantiteConsommation(newQuantity, options.mode);
       await updateProduct(id, { quantite: quantity });
       return quantity;
     },
@@ -110,10 +110,10 @@ export function useProducts() {
       const product = products.find((item) => item.id === id);
       if (!product) throw new Error('Produit introuvable.');
 
-      const whole = estProduitEntier(product);
+      const mode = getConsumeMode(product);
       const current = Number(product.quantite || 0);
-      const next = quantiteConsommation(current - Number(amount || 1), whole);
-      await updateProductQuantity(id, next, { whole });
+      const next = quantiteConsommation(current - Number(amount || 1), 'count');
+      await updateProductQuantity(id, next, { mode });
       return next;
     },
     [products, updateProductQuantity]
@@ -123,18 +123,18 @@ export function useProducts() {
     async (product, options = {}) => {
       if (!product?.id) throw new Error('Produit introuvable.');
 
-      const whole = estProduitEntier(product);
+      const mode = getConsumeMode(product);
       const current = Number(product.quantite || 0);
       const next =
         options.remainingQuantity !== undefined
-          ? quantiteConsommation(options.remainingQuantity, whole)
-          : quantiteConsommation(current - Number(options.amount || 1), whole);
+          ? quantiteConsommation(options.remainingQuantity, mode)
+          : quantiteConsommation(current - Number(options.amount || 1), mode);
 
       if (next <= 0) {
         return { previousQuantity: current, newQuantity: 0, needsConfirmation: true };
       }
 
-      await updateProductQuantity(product.id, next, { whole });
+      await updateProductQuantity(product.id, next, { mode });
       return { previousQuantity: current, newQuantity: next, needsConfirmation: false };
     },
     [updateProductQuantity]
