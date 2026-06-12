@@ -18,6 +18,10 @@ const EMOJIS = {
   'Condiments & Sauces': '🫙',
   'Boissons': '🧃',
   'Boulangerie': '🥖',
+  'Entretien & Ménage': '🧼',
+  'Hygiène & Salle de bain': '🧴',
+  'Papeterie & Divers maison': '🧻',
+  'Animaux': '🐾',
   'Autre': '🍽️',
 };
 

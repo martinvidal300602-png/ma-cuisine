@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { estimerDLCString } from './dlc_estimees';
+import { categorieSansDLC } from './dateExpiration';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL =
@@ -22,6 +23,10 @@ export const RECEIPT_CATEGORIES = [
   'Condiments & Sauces',
   'Boissons',
   'Boulangerie',
+  'Entretien & Ménage',
+  'Hygiène & Salle de bain',
+  'Papeterie & Divers maison',
+  'Animaux',
   'Autre',
 ];
 
@@ -39,8 +44,8 @@ Aucun texte avant ou après le JSON.
 Pas de \`\`\`json.
 Pas de commentaire.
 Le JSON doit toujours respecter exactement la structure attendue :
-{"items":[{"raw_label":"string","name":"string","brand":"string|null","category":"Viandes & Poissons|Légumes & Fruits|Produits laitiers|Conserves & Épicerie|Surgelés|Céréales & Pâtes|Condiments & Sauces|Boissons|Boulangerie|Autre","quantity":1,"unit":"string","suggested_location":"Frigo|Placard sous fenêtre|Plan de travail|Placard épices","confidence":"high|medium|low"}],"uncertain_items":[{"raw_label":"string","reason":"string"}]}
-Lis uniquement les lignes correspondant à des produits achetés.
+{"items":[{"raw_label":"string","name":"string","brand":"string|null","category":"Viandes & Poissons|Légumes & Fruits|Produits laitiers|Conserves & Épicerie|Surgelés|Céréales & Pâtes|Condiments & Sauces|Boissons|Boulangerie|Entretien & Ménage|Hygiène & Salle de bain|Papeterie & Divers maison|Animaux|Autre","quantity":1,"unit":"string","suggested_location":"Frigo|Placard sous fenêtre|Plan de travail|Placard épices","confidence":"high|medium|low"}],"uncertain_items":[{"raw_label":"string","reason":"string"}]}
+Lis uniquement les lignes correspondant à des produits achetés, y compris les produits non alimentaires du foyer.
 Ignore total, sous-total, TVA, carte bancaire, CB, rendu monnaie, fidélité, date, magasin, promotions non alimentaires, remises.
 Si plusieurs images sont fournies, ce sont différentes parties du même ticket de caisse.
 Reconstitue mentalement le ticket complet.
@@ -52,6 +57,12 @@ Pour chaque produit, propose un emplacement probable parmi :
 - Placard sous fenêtre
 - Plan de travail
 - Placard épices
+
+Catégories maison autorisées :
+- lessive, lessive caps, adoucissant, détachant, éponges, liquide vaisselle, pastilles lave-vaisselle, nettoyant sol, javel → Entretien & Ménage
+- sopalin, mouchoirs, sacs poubelle, papier aluminium, film alimentaire → Papeterie & Divers maison
+- papier toilette, dentifrice, gel douche, shampoing, savon, déodorant → Hygiène & Salle de bain
+- croquettes, pâtée, litière → Animaux
 
 Règles d’emplacement :
 - produits frais, lait, yaourt, fromage, viande, poisson, légumes frais, fruits fragiles → Frigo
@@ -67,6 +78,10 @@ Exemples d’abréviations :
 - YAOURT NAT → yaourt nature, Produits laitiers, Frigo
 - PATES → pâtes, Céréales & Pâtes, Placard sous fenêtre
 - PAPRIKA → paprika, Condiments & Sauces, Placard épices
+- LESSIVE CAPS → lessive caps, Entretien & Ménage, quantity selon le ticket, unit caps, Placard sous fenêtre
+- EPONGES → éponges, Entretien & Ménage, Placard sous fenêtre
+- SOPALIN → sopalin, Papeterie & Divers maison, Placard sous fenêtre
+- PAPIER TOILETTE → papier toilette, Hygiène & Salle de bain, Placard sous fenêtre
 
 Si tu n’es pas sûr, mets confidence low.
 Si une ligne est incertaine, mets-la dans uncertain_items.
@@ -400,7 +415,7 @@ function meilleureConfiance(first, second) {
 
 function normaliserItemTicket(item) {
   const categorie = corrigerCategorieTicket(item.category, item.name);
-  const dateExpiration = estimerDLCString(item.name, categorie, 'ticket');
+  const dateExpiration = categorieSansDLC(categorie) ? null : estimerDLCString(item.name, categorie, 'ticket');
   const sensitive = estProduitSensibleOuAmbigu(item);
   const quantite = extraireQuantiteTicket(item) ?? normaliserQuantiteGemini(item.quantity);
   const unite = pluraliserUnite(nettoyerUnite(item.unit), quantite);
@@ -450,6 +465,18 @@ function estPrixTicket(token) {
 
 function corrigerCategorieTicket(category, name) {
   const normalized = normaliserTexte(name);
+  if (/\b(lessive|adoucissant|detanchant|detacheur|eponge|eponges|vaisselle|lave vaisselle|nettoyant|javel)\b/.test(normalized)) {
+    return 'Entretien & Ménage';
+  }
+  if (/\b(sopalin|mouchoir|mouchoirs|sacs? poubelle|papier aluminium|film alimentaire)\b/.test(normalized)) {
+    return 'Papeterie & Divers maison';
+  }
+  if (/\b(papier toilette|dentifrice|gel douche|shampoing|savon|deodorant)\b/.test(normalized)) {
+    return 'Hygiène & Salle de bain';
+  }
+  if (/\b(croquettes?|patee|litiere)\b/.test(normalized)) {
+    return 'Animaux';
+  }
   if (normalized.includes('sauce tomate')) return 'Condiments & Sauces';
   if (/\b(oreo|biscuit|biscuits|cookie|cookies)\b/.test(normalized)) return 'Boulangerie';
   return category;
@@ -468,6 +495,14 @@ const UNIT_TRANSLATIONS = {
   bottles: 'bouteilles',
   piece: 'pièce',
   pieces: 'pièces',
+  cap: 'cap',
+  caps: 'caps',
+  capsule: 'capsule',
+  capsules: 'capsules',
+  roll: 'rouleau',
+  rolls: 'rouleaux',
+  sponge: 'éponge',
+  sponges: 'éponges',
 };
 
 const UNIT_PLURALS = {
@@ -479,6 +514,11 @@ const UNIT_PLURALS = {
   pot: 'pots',
   pièce: 'pièces',
   piece: 'pièces',
+  cap: 'caps',
+  capsule: 'capsules',
+  rouleau: 'rouleaux',
+  éponge: 'éponges',
+  eponge: 'éponges',
 };
 
 function nettoyerUnite(unit) {

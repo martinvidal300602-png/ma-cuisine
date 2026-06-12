@@ -1,7 +1,19 @@
 // src/lib/dateExpiration.js
-import { estimerDLCString } from './dlc_estimees';
+import { CATEGORIES_SANS_DLC, estimerDLCString } from './dlc_estimees';
+
+export function categorieSansDLC(categorie) {
+  return CATEGORIES_SANS_DLC.includes(categorie);
+}
 
 export function appliquerDateExpirationEstimee(product, source = 'manuel') {
+  if (categorieSansDLC(product.categorie)) {
+    return {
+      ...product,
+      date_expiration: null,
+      date_expiration_estimee: false,
+    };
+  }
+
   if (product.date_expiration) {
     return {
       ...product,

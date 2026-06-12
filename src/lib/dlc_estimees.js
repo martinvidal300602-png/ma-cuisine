@@ -560,6 +560,13 @@ export const DLC_PAR_CATEGORIE = {
   "Autre":                14,
 };
 
+export const CATEGORIES_SANS_DLC = [
+  "Entretien & Ménage",
+  "Hygiène & Salle de bain",
+  "Papeterie & Divers maison",
+  "Animaux",
+];
+
 // ─── Normalisation ──────────────────────────────────────────────────────────
 function normaliser(texte) {
   return String(texte || "")
@@ -645,6 +652,10 @@ function joursContextuels(nomNormalise, categorie, source) {
  * @returns {Date|null} Date estimée, ou null si aucune correspondance
  */
 export function estimerDLC(nomProduit, categorie = null, source = "manuel") {
+  if (CATEGORIES_SANS_DLC.includes(categorie)) {
+    return null;
+  }
+
   const nomNormalise = normaliser(nomProduit);
   const joursPrioritaires = joursContextuels(nomNormalise, categorie, source);
 

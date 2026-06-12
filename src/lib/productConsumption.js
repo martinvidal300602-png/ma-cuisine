@@ -26,6 +26,14 @@ const COUNT_UNITS = new Set([
   'tomates',
   'oeuf',
   'oeufs',
+  'cap',
+  'caps',
+  'capsule',
+  'capsules',
+  'rouleau',
+  'rouleaux',
+  'eponge',
+  'eponges',
 ]);
 
 const QUANTITY_UNITS = new Set(['g', 'kg', 'ml', 'cl', 'l', 'litre', 'litres']);
@@ -77,6 +85,18 @@ const COUNT_PRODUCE_WORDS = [
   'concombre',
 ];
 
+const COUNT_HOME_WORDS = [
+  'lessive caps',
+  'capsule',
+  'eponge',
+  'sopalin',
+  'papier toilette',
+  'mouchoir',
+  'sac poubelle',
+  'croquette',
+  'litiere',
+];
+
 const SINGULAR_UNITS = {
   unites: 'unité',
   'unite s': 'unité',
@@ -115,6 +135,14 @@ const SINGULAR_UNITS = {
   tomate: 'tomate',
   oeufs: 'œuf',
   oeuf: 'œuf',
+  caps: 'cap',
+  cap: 'cap',
+  capsules: 'capsule',
+  capsule: 'capsule',
+  rouleaux: 'rouleau',
+  rouleau: 'rouleau',
+  eponges: 'éponge',
+  eponge: 'éponge',
 };
 
 const PLURAL_UNITS = {
@@ -155,6 +183,14 @@ const PLURAL_UNITS = {
   tomate: 'tomates',
   oeufs: 'œufs',
   oeuf: 'œufs',
+  caps: 'caps',
+  cap: 'caps',
+  capsules: 'capsules',
+  capsule: 'capsules',
+  rouleaux: 'rouleaux',
+  rouleau: 'rouleaux',
+  eponges: 'éponges',
+  eponge: 'éponges',
 };
 
 export function normalizeUnit(unit) {
@@ -181,6 +217,7 @@ export function getConsumeMode(product) {
   const category = normalizeText(product?.categorie);
 
   if (QUANTITY_UNITS.has(unit)) return 'remaining_quantity';
+  if (COUNT_HOME_WORDS.some((word) => name.includes(word))) return 'count';
   if (FRACTION_NAME_WORDS.some((word) => name.includes(word))) return 'remaining_fraction';
   if (isIndividualProduce(name) && (isPieceLikeUnit(unit) || isProduceCategory(category))) return 'count';
   if (FRACTION_UNITS.has(unit)) return 'remaining_fraction';

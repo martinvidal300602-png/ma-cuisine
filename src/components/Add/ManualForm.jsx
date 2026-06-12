@@ -1,7 +1,7 @@
 // src/components/Add/ManualForm.jsx
 import { useEffect, useState } from 'react';
 import Button from '../UI/Button';
-import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
+import { appliquerDateExpirationEstimee, categorieSansDLC } from '../../lib/dateExpiration';
 
 export const CATEGORIES = [
   'Viandes & Poissons',
@@ -13,6 +13,10 @@ export const CATEGORIES = [
   'Condiments & Sauces',
   'Boissons',
   'Boulangerie',
+  'Entretien & Ménage',
+  'Hygiène & Salle de bain',
+  'Papeterie & Divers maison',
+  'Animaux',
   'Autre',
 ];
 
@@ -86,6 +90,17 @@ export default function ManualForm({ initial = {}, onSubmit, submitLabel = 'Ajou
   useEffect(() => {
     if (!form.nom.trim()) return;
     if (dateEditedManually) return;
+    if (categorieSansDLC(form.categorie)) {
+      if (form.date_expiration || form.date_expiration_estimee) {
+        setForm((f) => ({
+          ...f,
+          date_expiration: '',
+          date_expiration_estimee: false,
+        }));
+      }
+      setDateEstimated(false);
+      return;
+    }
     if (form.date_expiration && !dateEstimated) return;
 
     const withEstimate = appliquerDateExpirationEstimee(

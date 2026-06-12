@@ -14,6 +14,10 @@ const CATEGORY_MAP = [
   { match: ['sauces', 'condiments', 'spices'], categorie: 'Condiments & Sauces' },
   { match: ['beverages', 'waters', 'juices', 'sodas'], categorie: 'Boissons' },
   { match: ['breads', 'pastries', 'biscuits', 'bakery'], categorie: 'Boulangerie' },
+  { match: ['cleaning', 'detergents', 'dishwashing', 'household'], categorie: 'Entretien & Ménage' },
+  { match: ['hygiene', 'toothpaste', 'shampoo', 'soap', 'deodorants'], categorie: 'Hygiène & Salle de bain' },
+  { match: ['paper-towels', 'toilet-paper', 'trash-bags', 'aluminium-foil'], categorie: 'Papeterie & Divers maison' },
+  { match: ['pet-food', 'pets', 'cat-food', 'dog-food'], categorie: 'Animaux' },
 ];
 
 function devinerCategorie(tags) {

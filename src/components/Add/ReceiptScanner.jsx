@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Button from '../UI/Button';
 import { analyserTicketCaisse } from '../../lib/receiptGemini';
-import { appliquerDateExpirationEstimee } from '../../lib/dateExpiration';
+import { appliquerDateExpirationEstimee, categorieSansDLC } from '../../lib/dateExpiration';
 import { CATEGORIES, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 import ReceiptShoppingReconciliation from '../Shopping/ReceiptShoppingReconciliation';
 
@@ -95,6 +95,9 @@ export default function ReceiptScanner({
               ...item,
               [key]: value,
               ...(key === 'date_expiration' ? { date_expiration_estimee: false } : {}),
+              ...(key === 'categorie' && categorieSansDLC(value)
+                ? { date_expiration: '', date_expiration_estimee: false }
+                : {}),
             }
           : item
       )
