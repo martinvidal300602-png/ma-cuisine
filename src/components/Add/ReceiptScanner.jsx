@@ -14,8 +14,8 @@ export default function ReceiptScanner({
   finishShoppingSession,
   userEmail,
 }) {
-  const [file, setFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(null);
@@ -24,24 +24,37 @@ export default function ReceiptScanner({
   const [uncertain, setUncertain] = useState([]);
 
   const handleFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
+    const selected = Array.from(e.target.files || []);
+    if (selected.length === 0) return;
     setItems([]);
     setUncertain([]);
     setError(null);
     setDone(false);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(f));
+    setFiles((current) => [...current, ...selected]);
+    setPreviewUrls((current) => [...current, ...selected.map((file) => URL.createObjectURL(file))]);
+    e.target.value = '';
+  };
+
+  const removePhoto = (index) => {
+    setFiles((current) => current.filter((_, i) => i !== index));
+    setPreviewUrls((current) => {
+      const url = current[index];
+      if (url) URL.revokeObjectURL(url);
+      return current.filter((_, i) => i !== index);
+    });
+    setItems([]);
+    setUncertain([]);
+    setError(null);
+    setDone(false);
   };
 
   const handleAnalyze = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setAnalyzing(true);
     setError(null);
     setDone(false);
     try {
-      const result = await analyserTicketCaisse(file);
+      const result = await analyserTicketCaisse(files.length === 1 ? files[0] : files);
       setItems(
         result.items.map((item) =>
           appliquerDateExpirationEstimee(
@@ -113,9 +126,9 @@ export default function ReceiptScanner({
   const resetAfterSuccess = () => {
     setItems([]);
     setUncertain([]);
-    setFile(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
+    setFiles([]);
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    setPreviewUrls([]);
     setDone(true);
   };
 
@@ -180,29 +193,53 @@ export default function ReceiptScanner({
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-card border border-border p-4 space-y-3">
+        {files.length > 0 && (
+          <p className="text-sm text-muted">
+            {files.length} photo{files.length > 1 ? 's' : ''} sélectionnée{files.length > 1 ? 's' : ''}. Ajoutez une autre photo si le ticket continue.
+          </p>
+        )}
         <label className="block">
-          <span className="sr-only">Prendre ou importer une photo du ticket</span>
+          <span className="block text-sm font-medium mb-2">
+            {files.length > 0 ? 'Ajouter une autre photo' : 'Prendre ou importer le ticket'}
+          </span>
+          <span className="sr-only">
+            {files.length > 0 ? 'Ajouter une autre photo du ticket' : 'Prendre ou importer une ou plusieurs photos du ticket'}
+          </span>
           <input
             type="file"
             accept="image/*"
             capture="environment"
+            multiple
             onChange={handleFile}
             className="block w-full text-sm text-muted file:mr-3 file:px-4 file:py-2.5 file:rounded-card file:border-0 file:bg-accent file:text-white file:text-sm file:font-medium"
-            aria-label="Prendre une photo du ticket"
+            aria-label="Prendre ou importer une photo du ticket"
           />
         </label>
 
-        {previewUrl && (
-          <img
-            src={previewUrl}
-            alt="Ticket sélectionné"
-            className="w-full max-h-64 object-contain rounded-card border border-border bg-bg"
-          />
+        {previewUrls.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {previewUrls.map((url, index) => (
+              <div key={url} className="relative">
+                <img
+                  src={url}
+                  alt={`Ticket sélectionné ${index + 1}`}
+                  className="aspect-square w-full object-cover rounded-card border border-border bg-bg"
+                />
+                <button
+                  type="button"
+                  onClick={() => removePhoto(index)}
+                  className="absolute top-1 right-1 bg-bg/90 border border-border rounded px-1.5 py-0.5 text-xs text-danger"
+                >
+                  Retirer
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
-        {file && (
+        {files.length > 0 && (
           <Button size="lg" onClick={handleAnalyze} disabled={analyzing}>
-            {analyzing ? 'Lecture en cours…' : 'Scanner le ticket'}
+            {analyzing ? 'Lecture en cours…' : 'Analyser le ticket complet'}
           </Button>
         )}
 

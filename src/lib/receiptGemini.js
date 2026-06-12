@@ -35,6 +35,10 @@ export const RECEIPT_LOCATIONS = [
 const PROMPT = `Tu es un système d’extraction de produits depuis un ticket de caisse français.
 Lis uniquement les lignes correspondant à des produits achetés.
 Ignore total, sous-total, TVA, carte bancaire, rendu monnaie, fidélité, date, magasin, promotions non alimentaires.
+Si plusieurs images sont fournies, ce sont différentes parties du même ticket de caisse.
+Reconstitue mentalement le ticket complet.
+Ignore les doublons éventuels entre deux images qui se chevauchent.
+Ignore TOTAL, TVA, CB, remises, promotions, sous-total.
 Les tickets peuvent contenir des abréviations françaises.
 Pour chaque produit, propose un emplacement probable parmi :
 - Frigo
@@ -132,39 +136,51 @@ const GEMINI_RESPONSE_SCHEMA = {
 };
 
 /**
- * Analyse une photo de ticket de caisse.
- * @param {File} file
+ * Analyse une ou plusieurs photos du même ticket de caisse.
+ * @param {File|File[]} input
  * @returns {Promise<{items: Array, uncertain_items: Array}>}
  */
-export async function analyserTicketCaisse(file) {
+export async function analyserTicketCaisse(input) {
   if (!GEMINI_API_KEY) {
     throw new Error(
       'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env'
     );
   }
 
-  const image = await preparerImageTicket(file);
-  const text = await appelerGeminiTicket(image);
+  const files = Array.isArray(input) ? input : [input];
+  const cleanFiles = files.filter(Boolean);
+  if (cleanFiles.length === 0) {
+    throw new Error('Ajoutez au moins une photo du ticket.');
+  }
+
+  const images = await Promise.all(cleanFiles.map(preparerImageTicket));
+  const text = await appelerGeminiTicket(images);
   const parsed = validerReponseTicket(text);
+  const items = dedupliquerItemsTicket(parsed.items);
 
   return {
-    items: parsed.items.map(normaliserItemTicket),
+    items: items.map(normaliserItemTicket),
     uncertain_items: parsed.uncertain_items,
   };
 }
 
-async function appelerGeminiTicket(image) {
+async function appelerGeminiTicket(images) {
+  const imageParts = images.flatMap((image, index) => [
+    { text: `Image ${index + 1}/${images.length} du même ticket de caisse.` },
+    {
+      inline_data: {
+        mime_type: image.mimeType,
+        data: image.base64,
+      },
+    },
+  ]);
+
   const body = {
     contents: [
       {
         parts: [
           { text: PROMPT },
-          {
-            inline_data: {
-              mime_type: image.mimeType,
-              data: image.base64,
-            },
-          },
+          ...imageParts,
         ],
       },
     ],
@@ -220,6 +236,76 @@ function validerReponseTicket(text) {
   }
 
   return result.data;
+}
+
+function dedupliquerItemsTicket(items) {
+  const result = [];
+
+  items.forEach((item) => {
+    const existingIndex = result.findIndex((candidate) => itemsTicketProches(candidate, item));
+    if (existingIndex === -1) {
+      result.push(item);
+      return;
+    }
+
+    result[existingIndex] = fusionnerItemsTicket(result[existingIndex], item);
+  });
+
+  return result;
+}
+
+function itemsTicketProches(first, second) {
+  const firstKey = cleDoublonTicket(first);
+  const secondKey = cleDoublonTicket(second);
+  if (!firstKey || !secondKey) return false;
+  if (firstKey === secondKey) return true;
+  if (firstKey.includes(secondKey) || secondKey.includes(firstKey)) return true;
+
+  const firstTokens = firstKey.split(' ');
+  const secondTokens = secondKey.split(' ');
+  const shorter = firstTokens.length <= secondTokens.length ? firstTokens : secondTokens;
+  const longer = firstTokens.length > secondTokens.length ? firstTokens : secondTokens;
+  const common = shorter.filter((token) => longer.includes(token));
+  return shorter.length > 0 && common.length / shorter.length >= 0.8;
+}
+
+function cleDoublonTicket(item) {
+  return normaliserTexte(`${item.raw_label || ''} ${item.name} ${item.brand || ''}`)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\b\d+(?:\.\d{2})?\b/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function fusionnerItemsTicket(first, second) {
+  const firstQuantity = Number(first.quantity);
+  const secondQuantity = Number(second.quantity);
+  const sameQuantity = Number.isFinite(firstQuantity) && Number.isFinite(secondQuantity) && firstQuantity === secondQuantity;
+
+  return {
+    ...first,
+    raw_label: choisirLabelTicket(first.raw_label, second.raw_label),
+    name: choisirNomTicket(first.name, second.name),
+    brand: first.brand || second.brand || null,
+    category: first.category !== 'Autre' ? first.category : second.category,
+    quantity: sameQuantity ? firstQuantity : Math.max(firstQuantity || 1, secondQuantity || 1),
+    unit: first.unit || second.unit,
+    suggested_location: first.suggested_location || second.suggested_location,
+    confidence: meilleureConfiance(first.confidence, second.confidence),
+  };
+}
+
+function choisirLabelTicket(first, second) {
+  return String(first || '').length >= String(second || '').length ? first : second;
+}
+
+function choisirNomTicket(first, second) {
+  return String(first || '').length >= String(second || '').length ? first : second;
+}
+
+function meilleureConfiance(first, second) {
+  const rank = { low: 0, medium: 1, high: 2 };
+  return rank[second] > rank[first] ? second : first;
 }
 
 function normaliserItemTicket(item) {
