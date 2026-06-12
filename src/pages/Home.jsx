@@ -4,9 +4,16 @@ import ProductList from '../components/Inventory/ProductList';
 /**
  * Page Stock : liste temps réel de tous les produits.
  */
-export default function Home({ products, loading, error, updateProduct, deleteProduct, addShoppingItem }) {
-  const handleUpdateQuantity = (id, quantite) => updateProduct(id, { quantite });
-
+export default function Home({
+  products,
+  loading,
+  error,
+  deleteProduct,
+  updateProductQuantity,
+  decrementProduct,
+  consumeProduct,
+  addShoppingItem,
+}) {
   return (
     <div>
       <header className="mb-4">
@@ -19,7 +26,9 @@ export default function Home({ products, loading, error, updateProduct, deletePr
         products={products}
         loading={loading}
         error={error}
-        onUpdateQuantity={handleUpdateQuantity}
+        onUpdateQuantity={updateProductQuantity}
+        onDecrementProduct={decrementProduct}
+        onConsumeProduct={consumeProduct}
         onDelete={deleteProduct}
         onAddShoppingItem={addShoppingItem}
       />

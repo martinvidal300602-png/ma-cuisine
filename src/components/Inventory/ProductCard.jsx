@@ -3,6 +3,9 @@ import { useState } from 'react';
 import Badge from '../UI/Badge';
 import { joursRestants } from '../../hooks/useAlerts';
 import AddToListButton from '../Shopping/AddToListButton';
+import UseProductModal from './UseProductModal';
+import EmptyProductSheet from './EmptyProductSheet';
+import { estProduitDivisible, estProduitEntier, quantiteConsommation } from '../../lib/productConsumption';
 
 // Placeholder emoji par catégorie quand le produit n'a pas de photo
 const EMOJIS = {
@@ -27,29 +30,125 @@ function badgeExpiration(dateExpiration) {
   return { variant: 'ok', label: `${jours} j restants` };
 }
 
-export default function ProductCard({ product, onUpdateQuantity, onDelete, onAddShoppingItem }) {
+export default function ProductCard({
+  product,
+  onUpdateQuantity,
+  onDecrementProduct,
+  onConsumeProduct,
+  onDelete,
+  onAddShoppingItem,
+}) {
   const [editingQty, setEditingQty] = useState(false);
   const [qtyValue, setQtyValue] = useState(product.quantite);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [useModalOpen, setUseModalOpen] = useState(false);
+  const [emptySheetOpen, setEmptySheetOpen] = useState(false);
 
   const badge = badgeExpiration(product.date_expiration);
+  const isWhole = estProduitEntier(product);
+  const isDivisible = estProduitDivisible(product);
+  const useMode = isDivisible ? 'divisible' : 'whole';
 
   const commitQty = async () => {
-    const value = Number(qtyValue);
+    const rawValue = Number(qtyValue);
     setEditingQty(false);
-    if (!Number.isFinite(value) || value < 0 || value === product.quantite) {
+    if (!Number.isFinite(rawValue)) {
+      setQtyValue(product.quantite);
+      return;
+    }
+    const value = quantiteConsommation(rawValue, isWhole);
+    if (value === product.quantite) {
       setQtyValue(product.quantite);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await onUpdateQuantity(product.id, value);
+      await onUpdateQuantity(product.id, value, { whole: isWhole });
     } catch (err) {
       setError(err.message);
       setQtyValue(product.quantite);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDecrement = async () => {
+    const current = Number(product.quantite || 0);
+    if (current - 1 <= 0) {
+      setEmptySheetOpen(true);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      await onDecrementProduct(product.id, 1);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUseConfirm = async (newQuantity) => {
+    if (!Number.isFinite(Number(newQuantity))) {
+      setError('La quantité doit être un nombre valide.');
+      return;
+    }
+    const quantity = quantiteConsommation(newQuantity, isWhole);
+    setUseModalOpen(false);
+    if (quantity <= 0) {
+      setEmptySheetOpen(true);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      await onConsumeProduct(product, { remainingQuantity: quantity });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleAddToShoppingFromEmpty = async () => {
+    if (!onAddShoppingItem) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onAddShoppingItem({
+        nom: product.nom,
+        marque: product.marque,
+        categorie: product.categorie,
+        quantite: 1,
+        unite: product.unite || 'unité',
+        priorite: 'normale',
+        source: 'stock',
+      });
+      await onUpdateQuantity(product.id, 0, { whole: isWhole });
+      setEmptySheetOpen(false);
+    } catch (err) {
+      setError(err.message || "Impossible d'ajouter ce produit à la liste.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteFromEmpty = async () => {
+    const ok = window.confirm(`Supprimer « ${product.nom} » du stock ?`);
+    if (!ok) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      await onDelete(product.id);
+      setEmptySheetOpen(false);
+    } catch (err) {
+      setError(err.message);
       setBusy(false);
     }
   };
@@ -140,6 +239,27 @@ export default function ProductCard({ product, onUpdateQuantity, onDelete, onAdd
           </button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          {isWhole && (
+            <button
+              type="button"
+              onClick={handleDecrement}
+              disabled={busy}
+              className="text-accent text-xs px-2 py-1 rounded bg-accent-light font-medium disabled:opacity-50"
+            >
+              −1
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setUseModalOpen(true)}
+            disabled={busy}
+            className="text-accent text-xs px-2 py-1 rounded bg-accent-light font-medium disabled:opacity-50"
+          >
+            Utiliser
+          </button>
+        </div>
+
         {onAddShoppingItem && (
           <div className="mt-2">
             <AddToListButton product={product} onAdd={onAddShoppingItem} />
@@ -152,6 +272,26 @@ export default function ProductCard({ product, onUpdateQuantity, onDelete, onAdd
           </p>
         )}
       </div>
+
+      {useModalOpen && (
+        <UseProductModal
+          product={product}
+          mode={useMode}
+          onClose={() => setUseModalOpen(false)}
+          onConfirm={handleUseConfirm}
+        />
+      )}
+
+      {emptySheetOpen && (
+        <EmptyProductSheet
+          product={product}
+          busy={busy}
+          canAddToShopping={Boolean(onAddShoppingItem)}
+          onAddToShopping={handleAddToShoppingFromEmpty}
+          onDelete={handleDeleteFromEmpty}
+          onCancel={() => setEmptySheetOpen(false)}
+        />
+      )}
     </article>
   );
 }

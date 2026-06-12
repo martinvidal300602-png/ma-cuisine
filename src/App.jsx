@@ -12,6 +12,7 @@ import AddProduct from './pages/AddProduct';
 import ShoppingList from './pages/ShoppingList';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
+import { normaliserNomCourses } from './lib/matchShoppingItems';
 
 export default function App() {
   const { session, user, loading: authLoading, signIn, signOut } = useAuth();
@@ -38,11 +39,33 @@ export default function App() {
  * les abonnements temps réel Supabase ne sont créés qu'ici.
  */
 function AppConnectee({ user, signOut, tab, setTab }) {
-  const { products, loading, error, addProduct, addProducts, updateProduct, deleteProduct } =
+  const {
+    products,
+    loading,
+    error,
+    addProduct,
+    addProducts,
+    updateProduct,
+    updateProductQuantity,
+    decrementProduct,
+    consumeProduct,
+    deleteProduct,
+  } =
     useProducts();
   const shopping = useShoppingList();
   const shoppingSession = useShoppingSession();
   const { perimes, expirentBientot, cetteSemaine, alertCount } = useAlerts(products);
+
+  const addShoppingItem = async (item) => {
+    const incomingName = normaliserNomCourses(item.nom);
+    const exists = shopping.items.find((shoppingItem) => {
+      const existingName = normaliserNomCourses(shoppingItem.nom);
+      return existingName && incomingName && (existingName === incomingName || existingName.includes(incomingName) || incomingName.includes(existingName));
+    });
+
+    if (exists) return exists;
+    return shopping.addItem({ ...item, ajoute_par: user?.email ?? null });
+  };
 
   return (
     <div className="min-h-screen bg-bg">
@@ -54,7 +77,10 @@ function AppConnectee({ user, signOut, tab, setTab }) {
             error={error}
             updateProduct={updateProduct}
             deleteProduct={deleteProduct}
-            addShoppingItem={(item) => shopping.addItem({ ...item, ajoute_par: user?.email ?? null })}
+            updateProductQuantity={updateProductQuantity}
+            decrementProduct={decrementProduct}
+            consumeProduct={consumeProduct}
+            addShoppingItem={addShoppingItem}
           />
         )}
         {tab === 'ajouter' && (
