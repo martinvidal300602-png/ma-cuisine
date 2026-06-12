@@ -15,22 +15,25 @@ export default function UseProductModal({ product, mode, onClose, onConfirm }) {
   const current = Number(product.quantite || 0);
   const [usedAmount, setUsedAmount] = useState(1);
   const [remaining, setRemaining] = useState(current);
+  const [remainingTotal, setRemainingTotal] = useState(current);
   const [fraction, setFraction] = useState(0.5);
   const [error, setError] = useState(null);
+  const fractionAsTotal = mode === 'remaining_fraction' && current > 1;
 
   const nextQuantity = useMemo(() => {
     if (mode === 'count') {
       return quantiteConsommation(current - Number(usedAmount || 0), 'count');
     }
-    if (mode === 'remaining_quantity') {
+    if (mode === 'remaining_quantity' || fractionAsTotal) {
       return quantiteConsommation(remaining, mode);
     }
     return quantiteConsommation(current * Number(fraction || 0), mode);
-  }, [current, fraction, mode, remaining, usedAmount]);
+  }, [current, fraction, fractionAsTotal, mode, remaining, usedAmount]);
+  const exceedsCurrent = (mode === 'remaining_quantity' || fractionAsTotal) && nextQuantity > current;
 
   const confirm = (forcedQuantity) => {
     const value = forcedQuantity ?? nextQuantity;
-    if (mode === 'remaining_quantity' && value > current) {
+    if ((mode === 'remaining_quantity' || fractionAsTotal) && value > current) {
       setError('Il ne peut pas rester plus que la quantité actuelle.');
       return;
     }
@@ -43,8 +46,8 @@ export default function UseProductModal({ product, mode, onClose, onConfirm }) {
       <div className="w-full max-w-app mx-auto bg-bg rounded-card border border-border p-4 space-y-4 shadow-lg">
         <div>
           <h2 className="text-lg font-bold">{product.nom}</h2>
-          <p className="text-sm text-muted">Quantité actuelle : {formatQuantite(current, product.unite)}</p>
-          <p className="text-sm text-muted">Après validation : {formatQuantite(nextQuantity, product.unite)}</p>
+          <p className="text-sm text-muted">Quantité actuelle : {formatQuantite(current, product.unite, mode)}</p>
+          <p className="text-sm text-muted">Après validation : {formatQuantite(nextQuantity, product.unite, mode)}</p>
         </div>
 
         {mode === 'count' && (
@@ -116,7 +119,30 @@ export default function UseProductModal({ product, mode, onClose, onConfirm }) {
           </div>
         )}
 
-        {mode === 'remaining_fraction' && (
+        {mode === 'remaining_fraction' && fractionAsTotal && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Combien reste-t-il au total ?</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                inputMode="decimal"
+                value={remainingTotal}
+                onChange={(e) => {
+                  setRemainingTotal(e.target.value);
+                  setRemaining(e.target.value);
+                  setError(null);
+                }}
+                className="font-num flex-1 px-3 py-2 rounded-card border border-border bg-card"
+                aria-label="Quantité restante totale"
+              />
+              <span className="text-sm text-muted">{formatQuantite(2, product.unite, mode).replace(/^2\s*/, '')}</span>
+            </div>
+          </div>
+        )}
+
+        {mode === 'remaining_fraction' && !fractionAsTotal && (
           <div className="space-y-3">
             <p className="text-sm font-medium">Quelle part de la quantité actuelle reste-t-il ?</p>
             <div className="grid grid-cols-5 gap-2">
@@ -149,9 +175,9 @@ export default function UseProductModal({ product, mode, onClose, onConfirm }) {
           </div>
         )}
 
-        {error && (
+        {(error || exceedsCurrent) && (
           <p role="alert" className="text-danger text-sm">
-            {error}
+            {error || 'Il ne peut pas rester plus que la quantité actuelle.'}
           </p>
         )}
 
@@ -163,7 +189,7 @@ export default function UseProductModal({ product, mode, onClose, onConfirm }) {
             Tout utiliser
           </Button>
         </div>
-        <Button onClick={() => confirm()} disabled={mode === 'remaining_quantity' && nextQuantity > current}>
+        <Button onClick={() => confirm()} disabled={exceedsCurrent}>
           Confirmer
         </Button>
       </div>

@@ -220,10 +220,10 @@ export default function ProductCard({
                 setEditingQty(true);
               }}
               disabled={busy}
-              aria-label={`Quantité : ${formatQuantite(product.quantite, product.unite)}. Toucher pour modifier`}
+              aria-label={`Quantité : ${formatQuantite(product.quantite, product.unite, consumeMode)}. Toucher pour modifier`}
               className="font-num text-sm px-2 py-1 rounded bg-accent-light text-accent font-medium"
             >
-              {formatQuantite(product.quantite, product.unite)}
+              {formatQuantite(product.quantite, product.unite, consumeMode)}
             </button>
           )}
 
