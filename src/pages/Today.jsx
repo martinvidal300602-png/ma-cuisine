@@ -1,13 +1,11 @@
 // src/pages/Today.jsx
 import { useState } from 'react';
-import { BellRing, ChefHat, ChevronRight } from 'lucide-react';
 import TodayFocus from '../components/Dashboard/TodayFocus';
-import ShoppingPanel from '../components/Dashboard/ShoppingPanel';
 import QuickActions from '../components/Dashboard/QuickActions';
+import DashboardRecommendations from '../components/Dashboard/DashboardRecommendations';
 import AlertsList from '../components/Alerts/AlertsList';
 import MobileHeader from '../components/UI/MobileHeader';
 import ProfileButton from '../components/UI/ProfileButton';
-import { joursRestants } from '../hooks/useAlerts';
 
 /**
  * Aujourd'hui — le tableau de bord décisionnel.
@@ -51,14 +49,6 @@ export default function Today({
   }
 
   const produitsCetteSemaine = [...expirentBientot, ...cetteSemaine];
-  const semainePreview = produitsCetteSemaine.slice(0, 3);
-  const suggestion =
-    expirentBientot[0] ||
-    cetteSemaine[0] ||
-    products.find((product) => {
-      const days = joursRestants(product.date_expiration);
-      return days === null || days >= 0;
-    });
 
   return (
     <div className="space-y-6">
@@ -87,84 +77,22 @@ export default function Today({
           <TodayFocus
             perimes={perimes}
             expirentBientot={expirentBientot}
-            actions={actions}
-            onSeeAll={() => setAlertsOpen(true)}
-          />
-
-          <ShoppingPanel
             products={products}
             shopping={shopping}
             session={shoppingSession}
+            actions={actions}
             onOpenCourses={onOpenCourses}
-            addShoppingItem={actions.addShoppingItem}
+            onSeeAll={() => setAlertsOpen(true)}
           />
 
-          <section aria-label="Cette semaine">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-display font-bold text-base">Cette semaine</h2>
-              {produitsCetteSemaine.length > 3 && (
-                <button type="button" onClick={() => setAlertsOpen(true)} className="pressable text-xs font-semibold text-accent inline-flex items-center">
-                  Tout voir <ChevronRight size={14} />
-                </button>
-              )}
-            </div>
-            <div className="bg-card rounded-card border border-border overflow-hidden">
-              {semainePreview.length === 0 ? (
-                <div className="p-4 flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-full bg-fresh-ok-bg text-fresh-ok flex items-center justify-center shrink-0">
-                    <BellRing size={17} strokeWidth={1.9} />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold">Semaine tranquille</p>
-                    <p className="text-xs text-muted">Aucune date ne demande d’attention.</p>
-                  </div>
-                </div>
-              ) : (
-                semainePreview.map((product, index) => {
-                  const days = joursRestants(product.date_expiration);
-                  return (
-                    <button
-                      key={product.id}
-                      type="button"
-                      onClick={() => onOpenCuisine(product.emplacement)}
-                      className={`pressable w-full min-h-14 px-4 py-3 flex items-center gap-3 text-left ${index ? 'border-t border-border' : ''}`}
-                    >
-                      <span className="font-num text-xs font-semibold text-fresh-week w-10 shrink-0">
-                        {days === 0 ? 'Ce jour' : `J−${days}`}
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-sm font-semibold truncate">{product.nom}</span>
-                        <span className="block text-xs text-muted truncate">{product.emplacement}</span>
-                      </span>
-                      <ChevronRight size={15} className="text-muted" />
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          {suggestion && (
-            <section aria-label="Recommandation">
-              <h2 className="font-display font-bold text-base mb-2">Suggestion</h2>
-              <button
-                type="button"
-                onClick={() => onOpenCuisine(suggestion.emplacement)}
-                className="pressable w-full bg-card rounded-card border border-border p-4 flex items-start gap-3 text-left"
-              >
-                <span className="w-10 h-10 rounded-full bg-accent-light text-accent flex items-center justify-center shrink-0">
-                  <ChefHat size={19} strokeWidth={1.9} />
-                </span>
-                <span className="flex-1 min-w-0">
-                  <span className="block text-sm font-semibold">Commencez par {suggestion.nom}</span>
-                  <span className="block text-xs text-muted mt-0.5">
-                    {suggestion.emplacement} · idéal pour décider du prochain repas sans gaspiller.
-                  </span>
-                </span>
-                <ChevronRight size={16} className="text-muted mt-1" />
-              </button>
-            </section>
-          )}
+          <DashboardRecommendations
+            products={products}
+            shopping={shopping}
+            thisWeek={produitsCetteSemaine}
+            onOpenCuisine={onOpenCuisine}
+            onOpenCourses={onOpenCourses}
+            onOpenPhoto={() => onOpenScan('photo')}
+          />
 
           <QuickActions onSelect={onOpenScan} />
         </>

@@ -67,7 +67,7 @@ npm run dev      # http://localhost:5173
 npm run build    # production
 ```
 
-`.env` identique à l'app actuelle (mêmes clés `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GEMINI_API_KEY`).
+Note historique : cette V2 utilisait encore une clé Gemini côté client. La V3 actuelle l’a supprimée au profit de la variable serveur `GEMINI_API_KEY` et de `/api/gemini`.
 
 ## À tester sur iPhone (Safari, puis « Ajouter à l'écran d'accueil »)
 

@@ -53,7 +53,7 @@ export default function AddFlow({
     const duplicates = trouverDoublonsProbables(payload, products);
 
     if (duplicates.length === 0) {
-      return addProducts(payload);
+      return addProducts(payload, { source: mode });
     }
 
     const duplicateProducts = new Set(duplicates.map((entry) => entry.product));
@@ -96,7 +96,7 @@ export default function AddFlow({
         await updateProduct(entry.existing.id, creerChampsFusion(entry.existing, entry.product));
       }
 
-      const inserted = toInsert.length > 0 ? await addProducts(toInsert) : [];
+      const inserted = toInsert.length > 0 ? await addProducts(toInsert, { source: mode }) : [];
       pendingResolveRef.current?.(inserted ?? []);
       clearPendingDuplicates();
     } catch (err) {
@@ -135,7 +135,14 @@ export default function AddFlow({
         </header>
 
         <div className="pt-1">
-          {mode === 'photo' && <FridgePhoto onSubmitMany={handleAddMany} userEmail={userEmail} />}
+          {mode === 'photo' && (
+            <FridgePhoto
+              onSubmitMany={handleAddMany}
+              onUpdateExisting={updateProduct}
+              existingProducts={products}
+              userEmail={userEmail}
+            />
+          )}
           {mode === 'barcode' && <BarcodeScanner onSubmit={handleAddOne} />}
           {mode === 'receipt' && (
             <ReceiptScanner

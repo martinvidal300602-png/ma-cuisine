@@ -16,11 +16,14 @@ export default async function handler(req, res) {
   }
 
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return res.status(503).json({ ok: false, error: 'Protection cron non configurée.' });
+  }
+  if (req.headers.authorization !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ ok: false, error: 'Autorisation cron invalide.' });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const ntfyTopic = process.env.NTFY_TOPIC;
 
@@ -56,7 +59,8 @@ export default async function handler(req, res) {
     if (error) throw new Error(error.message);
     produits = data ?? [];
   } catch (err) {
-    return res.status(500).json({ ok: false, error: 'Requête Supabase échouée : ' + err.message });
+    console.error('[api/notify] supabase query failed', err.message);
+    return res.status(500).json({ ok: false, error: 'Lecture des alertes impossible.' });
   }
 
   if (produits.length === 0) {
@@ -92,7 +96,8 @@ export default async function handler(req, res) {
       throw new Error(`ntfy.sh a répondu ${ntfyResponse.status}`);
     }
   } catch (err) {
-    return res.status(500).json({ ok: false, error: 'Envoi ntfy échoué : ' + err.message });
+    console.error('[api/notify] ntfy delivery failed', err.message);
+    return res.status(500).json({ ok: false, error: 'Envoi de la notification impossible.' });
   }
 
   return res.status(200).json({ ok: true, sent: true, count: produits.length });

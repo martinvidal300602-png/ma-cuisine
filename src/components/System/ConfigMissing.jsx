@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Check, Clipboard, Settings2 } from 'lucide-react';
 
 const ENV_TEMPLATE = `VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJ...
-VITE_GEMINI_API_KEY=AIza...`;
+VITE_SUPABASE_ANON_KEY=eyJ...`;
 
 export default function ConfigMissing({ missingVariables }) {
   const [copied, setCopied] = useState(false);
@@ -46,13 +45,13 @@ export default function ConfigMissing({ missingVariables }) {
         </div>
 
         <div className="relative">
-          <pre className="font-num text-[11px] leading-relaxed whitespace-pre-wrap bg-text text-bg rounded-card p-3 pr-12 overflow-x-auto">
+          <pre className="font-num text-[11px] leading-relaxed whitespace-pre-wrap bg-text text-bg rounded-card p-3 pr-14 overflow-x-auto">
             {ENV_TEMPLATE}
           </pre>
           <button
             type="button"
             onClick={copyTemplate}
-            className="pressable absolute top-2 right-2 w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center"
+            className="pressable absolute top-2 right-2 w-11 h-11 rounded-xl bg-white/10 text-white flex items-center justify-center"
             aria-label="Copier le modèle de configuration"
           >
             {copied ? <Check size={17} /> : <Clipboard size={17} />}

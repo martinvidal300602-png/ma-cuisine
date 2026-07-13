@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import FilterBar from './FilterBar';
 import ProductCard from './ProductCard';
 import { FRESHNESS_BUCKETS, bucketFromProduct, toneVar } from '../../lib/freshness';
+import { calculateStockConfidence } from '../../lib/stockConfidence';
 
 /**
  * Liste des produits groupée par urgence : Périmés → À manger vite →
@@ -23,19 +24,21 @@ export default function ProductList({
   const [search, setSearch] = useState(initialSearch);
   const [categorie, setCategorie] = useState('');
   const [emplacement, setEmplacement] = useState('');
+  const [stockState, setStockState] = useState('');
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return products.filter((p) => {
       if (categorie && p.categorie !== categorie) return false;
       if (emplacement && p.emplacement !== emplacement) return false;
+      if (stockState && calculateStockConfidence(p).id !== stockState) return false;
       if (q) {
         const haystack = `${p.nom ?? ''} ${p.marque ?? ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
-  }, [products, search, categorie, emplacement]);
+  }, [products, search, categorie, emplacement, stockState]);
 
   const sections = useMemo(() => {
     const byBucket = new Map(FRESHNESS_BUCKETS.map((b) => [b.id, []]));
@@ -56,6 +59,8 @@ export default function ProductList({
         onCategorie={setCategorie}
         emplacement={emplacement}
         onEmplacement={setEmplacement}
+        stockState={stockState}
+        onStockState={setStockState}
         showEmplacement={showEmplacementFilter}
       />
 

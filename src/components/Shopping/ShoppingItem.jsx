@@ -1,7 +1,8 @@
 // src/components/Shopping/ShoppingItem.jsx
 import Icon from '../UI/Icon';
+import { CATEGORIES } from '../Add/ManualForm';
 
-export default function ShoppingItem({ item, onToggle, onDelete, large = false }) {
+export default function ShoppingItem({ item, onToggle, onDelete, onCategoryChange, large = false }) {
   return (
     <article
       className={`bg-card rounded-card border border-border shadow-card p-3 flex items-center gap-3 transition-opacity ${
@@ -41,14 +42,23 @@ export default function ShoppingItem({ item, onToggle, onDelete, large = false }
             {item.quantite} {item.unite}
           </span>
         </div>
-        <p className="text-xs text-muted mt-1 flex items-center gap-1.5">
-          {item.categorie}
+        <div className="text-xs text-muted mt-1 flex items-center gap-1.5">
+          {onCategoryChange ? (
+            <select
+              value={item.categorie || 'Autre'}
+              onChange={(event) => onCategoryChange(item.id, event.target.value)}
+              className="max-w-[11rem] bg-transparent text-xs text-muted border-0 p-0"
+              aria-label={`Changer le rayon de ${item.nom}`}
+            >
+              {CATEGORIES.map((categorie) => <option key={categorie} value={categorie}>{categorie}</option>)}
+            </select>
+          ) : item.categorie}
           {item.priorite === 'haute' && (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-fresh-soon-bg text-fresh-soon text-[10px] font-semibold">
               priorité haute
             </span>
           )}
-        </p>
+        </div>
       </div>
 
       {!large && (

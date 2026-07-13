@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { CheckCircle2, CircleAlert, Cloud, Cpu, BellRing } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, CircleAlert, Cloud, Cpu, BellRing, Crown, Users } from 'lucide-react';
 import Button from '../components/UI/Button';
 import PwaInstallHint from '../components/UI/PwaInstallHint';
 import { runtimeConfig } from '../config/runtime';
 import MobileHeader from '../components/UI/MobileHeader';
+import { supabase } from '../lib/supabase';
 
 const NTFY_STORAGE_KEY = 'ma-cuisine:ntfy-topic';
 
@@ -62,12 +63,13 @@ export default function Settings({ userEmail, onSignOut, onClose }) {
           <ServiceStatus
             icon={Cpu}
             label="Gemini 2.5 Flash Lite"
-            detail="Analyse des photos et tickets"
+            detail="Proxy serveur sécurisé pour photos et tickets"
             ready={runtimeConfig.hasGemini}
-            missingText="Clé absente : les autres fonctions restent utilisables"
           />
         </div>
       </section>
+
+      <FamilyPanel userEmail={userEmail} />
 
       <section className="bg-card rounded-card border border-border p-4">
         <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-2">Compte</h2>
@@ -134,6 +136,54 @@ export default function Settings({ userEmail, onSignOut, onClose }) {
       )}
     </div>
   );
+}
+
+function FamilyPanel({ userEmail }) {
+  const [members, setMembers] = useState([]);
+  const [available, setAvailable] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('foyer_membres')
+        .select('user_id, email, display_name, role, created_at')
+        .order('created_at', { ascending: true });
+      if (!active) return;
+      if (error) setAvailable(false);
+      else setMembers(data || []);
+    };
+    void load();
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <section className="bg-card rounded-card border border-border p-4">
+      <div className="flex items-center gap-3 mb-3">
+        <span className="w-9 h-9 rounded-xl bg-accent-light text-accent flex items-center justify-center"><Users size={17} /></span>
+        <div><h2 className="text-sm font-semibold">Foyer familial</h2><p className="text-xs text-muted">Stock et activité partagés</p></div>
+      </div>
+      {!available ? (
+        <p className="text-xs text-muted">La gestion familiale sera activée après validation de la migration V3 séparée.</p>
+      ) : members.length === 0 ? (
+        <p className="text-xs text-muted">{userEmail || 'Compte actuel'} · membre</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {members.map((member) => (
+            <div key={member.user_id} className="py-2.5 flex items-center gap-3 first:pt-0 last:pb-0">
+              <span className="w-8 h-8 rounded-full bg-bg border border-border flex items-center justify-center text-xs font-bold">{initials(member.display_name || member.email)}</span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-medium truncate">{member.display_name || member.email || 'Membre'}</span><span className="block text-xs text-muted">{member.role === 'administrateur' ? 'Administrateur du foyer' : 'Membre'}</span></span>
+              {member.role === 'administrateur' && <Crown size={15} className="text-warn" aria-label="Administrateur" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function initials(value) {
+  return String(value || '?').split(/[@\s._-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
 }
 
 function ServiceStatus({ icon: Icon, label, detail, ready, missingText = 'Configuration manquante' }) {

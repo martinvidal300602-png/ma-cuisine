@@ -5,6 +5,7 @@ import { analyserTicketCaisse } from '../../lib/receiptGemini';
 import { appliquerDateExpirationEstimee, categorieSansDLC } from '../../lib/dateExpiration';
 import { CATEGORIES, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
 import ReceiptShoppingReconciliation from '../Shopping/ReceiptShoppingReconciliation';
+import { recordEvent, recordTicketAnalysis } from '../../lib/eventLog';
 
 export default function ReceiptScanner({
   onSubmitMany,
@@ -138,6 +139,27 @@ export default function ReceiptScanner({
     setDone(true);
   };
 
+  const persistTicket = (selectedIndexes, inserted, shoppingIdsToDelete = []) => {
+    void recordTicketAnalysis({
+      sessionId: activeShoppingSession?.id,
+      items,
+      selectedIndexes,
+    });
+    void recordEvent({
+      type: 'ticket_validated',
+      entityType: 'ticket',
+      title: `${inserted.length} produit${inserted.length > 1 ? 's' : ''} ajouté${inserted.length > 1 ? 's' : ''} depuis un ticket`,
+      detail: shoppingIdsToDelete.length
+        ? `${shoppingIdsToDelete.length} article${shoppingIdsToDelete.length > 1 ? 's' : ''} rapproché${shoppingIdsToDelete.length > 1 ? 's' : ''} avec les courses`
+        : 'Ticket vérifié manuellement',
+      payload: {
+        productIds: inserted.map((product) => product.id),
+        shoppingIdsToDelete,
+        sessionId: activeShoppingSession?.id || null,
+      },
+    });
+  };
+
   const handleAddSelected = async () => {
     const indexes = items.map((item, index) => (item.selected ? index : null)).filter((index) => index !== null);
     const payload = buildPayload(indexes);
@@ -150,7 +172,8 @@ export default function ReceiptScanner({
     setAdding(true);
     setError(null);
     try {
-      await onSubmitMany(payload);
+      const inserted = await onSubmitMany(payload);
+      persistTicket(indexes, inserted || []);
       resetAfterSuccess();
     } catch (err) {
       setError(err.message || "L'ajout a échoué.");
@@ -174,7 +197,7 @@ export default function ReceiptScanner({
     setAdding(true);
     setError(null);
     try {
-      await onSubmitMany(payload);
+      const inserted = await onSubmitMany(payload);
 
       if (shoppingIdsToDelete.length > 0) {
         if (!deleteShoppingItems) throw new Error('Suppression de la liste courses indisponible.');
@@ -186,6 +209,7 @@ export default function ReceiptScanner({
         await finishShoppingSession();
       }
 
+      persistTicket(selectedReceiptIndexes, inserted || [], shoppingIdsToDelete);
       resetAfterSuccess();
     } catch (err) {
       setError(err.message || "La validation du ticket a échoué.");

@@ -1,11 +1,12 @@
 // src/components/Inventory/FilterBar.jsx
 import { CATEGORIES, EMPLACEMENTS } from '../Add/ManualForm';
 import Icon from '../UI/Icon';
+import { STOCK_STATES } from '../../lib/stockConfidence';
 
 /**
  * Recherche (nom, marque) + emplacements en puces défilantes + filtre catégorie.
  */
-export default function FilterBar({ search, onSearch, categorie, onCategorie, emplacement, onEmplacement, showEmplacement = true }) {
+export default function FilterBar({ search, onSearch, categorie, onCategorie, emplacement, onEmplacement, stockState, onStockState, showEmplacement = true }) {
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -35,19 +36,30 @@ export default function FilterBar({ search, onSearch, categorie, onCategorie, em
       </div>
       )}
 
-      <select
-        value={categorie}
-        onChange={(e) => onCategorie(e.target.value)}
-        aria-label="Filtrer par catégorie"
-        className="w-full px-3 py-2 rounded-card border border-border bg-card text-sm text-text"
-      >
-        <option value="">Toutes catégories</option>
-        {CATEGORIES.map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
+      <div className="grid grid-cols-2 gap-2">
+        <select
+          value={categorie}
+          onChange={(e) => onCategorie(e.target.value)}
+          aria-label="Filtrer par catégorie"
+          className="w-full min-w-0 px-3 py-2 rounded-card border border-border bg-card text-sm text-text"
+        >
+          <option value="">Toutes catégories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select
+          value={stockState}
+          onChange={(e) => onStockState(e.target.value)}
+          aria-label="Filtrer par état du stock"
+          className="w-full min-w-0 px-3 py-2 rounded-card border border-border bg-card text-sm text-text"
+        >
+          <option value="">Tous les états</option>
+          {STOCK_STATES.map((state) => (
+            <option key={state.id} value={state.id}>{state.label}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

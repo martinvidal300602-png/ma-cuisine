@@ -1,6 +1,6 @@
 // src/pages/Courses.jsx
-import { useMemo, useState } from 'react';
-import { Plus, ChevronDown, ChevronUp, RotateCcw, Check, ShoppingCart, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, ChevronDown, ChevronUp, Mic, Check, ShoppingCart, Trash2 } from 'lucide-react';
 import Button from '../components/UI/Button';
 import MobileHeader from '../components/UI/MobileHeader';
 import EmptyState from '../components/UI/EmptyState';
@@ -9,6 +9,8 @@ import ShopMode from '../components/Shopping/ShopMode';
 import ShoppingActiveBanner from '../components/Shopping/ShoppingActiveBanner';
 import { CATEGORIES } from '../components/Add/ManualForm';
 import ProfileButton from '../components/UI/ProfileButton';
+import { buildShoppingSuggestions } from '../lib/shoppingSuggestions';
+import { usePurchaseHistory } from '../hooks/usePurchaseHistory';
 
 const DEFAULT_FORM = {
   nom: '',
@@ -39,6 +41,13 @@ export default function Courses({
   const [shopModeOpen, setShopModeOpen] = useState(false);
   const [addedSuggestions, setAddedSuggestions] = useState(new Set());
   const [showChecked, setShowChecked] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const purchaseHistory = usePurchaseHistory();
+  const speechSupported = typeof window !== 'undefined'
+    && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  useEffect(() => () => recognitionRef.current?.abort?.(), []);
 
   const set = (key) => (e) => setForm((current) => ({ ...current, [key]: e.target.value }));
 
@@ -58,17 +67,9 @@ export default function Courses({
     );
   }, [remaining]);
 
-  const shoppingNames = useMemo(
-    () => new Set(shopping.items.map((i) => (i.nom || '').trim().toLowerCase())),
-    [shopping.items]
-  );
   const suggestions = useMemo(
-    () =>
-      products
-        .filter((p) => Number(p.quantite || 0) <= 0)
-        .filter((p) => !shoppingNames.has((p.nom || '').trim().toLowerCase()))
-        .slice(0, 4),
-    [products, shoppingNames]
+    () => buildShoppingSuggestions(products, purchaseHistory, shopping.items),
+    [products, purchaseHistory, shopping.items]
   );
 
   const handleAdd = async () => {
@@ -86,22 +87,42 @@ export default function Courses({
     }
   };
 
-  const handleSuggest = async (p) => {
+  const handleSuggest = async (suggestion) => {
     setError(null);
     try {
       await addShoppingItem({
-        nom: p.nom,
-        marque: p.marque,
-        categorie: p.categorie,
+        nom: suggestion.nom,
+        marque: suggestion.marque,
+        categorie: suggestion.categorie,
         quantite: 1,
-        unite: p.unite || 'unité',
+        unite: suggestion.unite || 'unité',
         priorite: 'normale',
-        source: 'stock',
+        source: suggestion.source,
       });
-      setAddedSuggestions((s) => new Set([...s, p.id]));
+      setAddedSuggestions((s) => new Set([...s, suggestion.id]));
     } catch (err) {
       setError(err.message || 'Ajout impossible.');
     }
+  };
+
+  const startVoice = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+    recognitionRef.current?.abort?.();
+    const recognition = new Recognition();
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (transcript) setForm((current) => ({ ...current, nom: transcript }));
+    };
+    recognition.onerror = () => setError('La dictée n’a pas pu démarrer. Vous pouvez utiliser le micro du clavier iPhone.');
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setError(null);
+    setListening(true);
+    try { recognition.start(); } catch { setListening(false); }
   };
 
   const handleStart = async () => {
@@ -174,10 +195,23 @@ export default function Courses({
             value={form.nom}
             onChange={set('nom')}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+            enterKeyHint="done"
+            autoComplete="off"
             className={`${inputClass} flex-1`}
             placeholder="Ajouter… (ex. beurre doux)"
             aria-label="Produit à acheter"
           />
+          {speechSupported && (
+            <button
+              type="button"
+              onClick={startVoice}
+              aria-label="Ajouter un produit par dictée"
+              aria-pressed={listening}
+              className={`pressable w-11 h-11 rounded-card border flex items-center justify-center shrink-0 ${listening ? 'border-accent bg-accent-light text-accent' : 'border-border bg-bg text-muted'}`}
+            >
+              <Mic size={19} strokeWidth={2.1} />
+            </button>
+          )}
           <button
             type="button"
             onClick={handleAdd}
@@ -246,28 +280,32 @@ export default function Courses({
         )}
       </div>
 
-      {/* Suggestions de rachat (produits épuisés au stock) */}
+      {/* Suggestions explicables : stock et habitudes réelles. */}
       {suggestions.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-1.5">
-            Épuisés — à racheter ?
+            Suggestions intelligentes
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestions.map((p) => {
-              const added = addedSuggestions.has(p.id);
+          <div className="space-y-2">
+            {suggestions.map((suggestion) => {
+              const added = addedSuggestions.has(suggestion.id);
               return (
-                <button
-                  key={p.id}
-                  type="button"
-                  disabled={added}
-                  onClick={() => handleSuggest(p)}
-                  className={`pressable inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-                    added ? 'bg-fresh-ok-bg text-fresh-ok border-transparent' : 'bg-card text-text border-border'
-                  }`}
-                >
-                  {added ? <Check size={13} strokeWidth={2.4} /> : <RotateCcw size={13} strokeWidth={2.2} />}
-                  {p.nom}
-                </button>
+                <article key={suggestion.id} className="bg-card rounded-card border border-border p-3 flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-semibold truncate">{suggestion.nom}</h3>
+                    <p className="text-xs font-medium text-accent mt-0.5">{suggestion.reason}</p>
+                    <p className="text-xs text-muted mt-0.5">{suggestion.detail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={added}
+                    onClick={() => handleSuggest(suggestion)}
+                    className={`pressable min-w-10 h-10 rounded-card border flex items-center justify-center ${added ? 'bg-fresh-ok-bg text-fresh-ok border-transparent' : 'bg-bg text-accent border-border'}`}
+                    aria-label={added ? `${suggestion.nom} ajouté` : `Ajouter ${suggestion.nom}`}
+                  >
+                    {added ? <Check size={17} strokeWidth={2.4} /> : <Plus size={17} strokeWidth={2.3} />}
+                  </button>
+                </article>
               );
             })}
           </div>
@@ -308,6 +346,7 @@ export default function Courses({
                     item={item}
                     onToggle={(id, coche) => shopping.updateItem(id, { coche })}
                     onDelete={shopping.deleteItem}
+                    onCategoryChange={(id, categorie) => shopping.updateItem(id, { categorie })}
                   />
                 ))}
               </div>
@@ -347,6 +386,7 @@ export default function Courses({
                       item={item}
                       onToggle={(id, coche) => shopping.updateItem(id, { coche })}
                       onDelete={shopping.deleteItem}
+                      onCategoryChange={(id, categorie) => shopping.updateItem(id, { categorie })}
                     />
                   ))}
                 </div>

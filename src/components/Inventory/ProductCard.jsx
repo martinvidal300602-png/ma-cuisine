@@ -7,6 +7,8 @@ import Sheet from '../UI/Sheet';
 import Button from '../UI/Button';
 import { formatQuantite, getConsumeMode, quantiteConsommation } from '../../lib/productConsumption';
 import { jChip, toneClasses, toneVar } from '../../lib/freshness';
+import { calculateStockConfidence } from '../../lib/stockConfidence';
+import ProductHistory from './ProductHistory';
 
 export default function ProductCard({
   product,
@@ -28,6 +30,7 @@ export default function ProductCard({
   const chip = jChip(joursRestants(product.date_expiration));
   const consumeMode = getConsumeMode(product);
   const isCount = consumeMode === 'count';
+  const stockConfidence = calculateStockConfidence(product);
 
   useEffect(() => setQtyValue(product.quantite), [product.quantite]);
 
@@ -172,6 +175,11 @@ export default function ProductCard({
           <p className="text-xs text-muted mt-1 flex items-center gap-1 truncate">
             <MapPin size={12} strokeWidth={2} /> {product.emplacement || 'Emplacement inconnu'}
           </p>
+          <p className="text-[11px] mt-1 font-semibold">
+            <span className={`inline-flex rounded-full px-2 py-0.5 ${toneClasses(stockConfidence.tone)}`}>
+              {stockConfidence.label} · {stockConfidence.lastSeenLabel}
+            </span>
+          </p>
         </div>
 
         <div className={`j-chip ${toneClasses(chip.tone)}`} role="img" aria-label={chip.aria}>
@@ -211,6 +219,7 @@ export default function ProductCard({
               <DetailRow icon={MapPin} label="Emplacement" value={product.emplacement || '—'} />
               <DetailRow icon={CalendarDays} label="Date d’expiration" value={expirationLabel} />
               <DetailRow icon={Package} label="Catégorie" value={product.categorie || 'Autre'} />
+              <DetailRow icon={Package} label="État du stock" value={`${stockConfidence.label} · ${Math.round(stockConfidence.score * 100)} %`} />
             </div>
 
             <section>
@@ -258,6 +267,8 @@ export default function ProductCard({
                 </button>
               </div>
             </section>
+
+            <ProductHistory product={product} />
 
             {error && <p role="alert" className="text-danger text-sm">{error}</p>}
 

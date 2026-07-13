@@ -4,6 +4,8 @@ import {
   Check,
   CircleMinus,
   Clock3,
+  Camera,
+  ReceiptText,
   PackagePlus,
   RefreshCw,
   ShoppingBasket,
@@ -16,6 +18,7 @@ import EmptyState from '../components/UI/EmptyState';
 
 const TYPE_META = {
   product_added: { icon: PackagePlus, tone: 'bg-fresh-ok-bg text-fresh-ok' },
+  products_added: { icon: PackagePlus, tone: 'bg-fresh-ok-bg text-fresh-ok' },
   product_updated: { icon: RefreshCw, tone: 'bg-fresh-none-bg text-muted' },
   product_restocked: { icon: PackagePlus, tone: 'bg-fresh-ok-bg text-fresh-ok' },
   product_consumed: { icon: Utensils, tone: 'bg-fresh-week-bg text-fresh-week' },
@@ -26,8 +29,11 @@ const TYPE_META = {
   shopping_unchecked: { icon: RefreshCw, tone: 'bg-fresh-none-bg text-muted' },
   shopping_removed: { icon: CircleMinus, tone: 'bg-fresh-none-bg text-muted' },
   shopping_started: { icon: ShoppingBasket, tone: 'bg-accent-light text-accent' },
+  shopping_reopened: { icon: ShoppingBasket, tone: 'bg-accent-light text-accent' },
   shopping_finished: { icon: Check, tone: 'bg-fresh-ok-bg text-fresh-ok' },
   shopping_cancelled: { icon: CircleMinus, tone: 'bg-fresh-expired-bg text-fresh-expired' },
+  photo_analyzed: { icon: Camera, tone: 'bg-accent-light text-accent' },
+  ticket_validated: { icon: ReceiptText, tone: 'bg-fresh-ok-bg text-fresh-ok' },
 };
 
 function dayKey(timestamp) {
@@ -88,7 +94,9 @@ export default function Activity({ events, onClear, userEmail, onOpenSettings })
                             {new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(item.timestamp))}
                           </time>
                         </div>
-                        <p className="text-xs text-muted mt-0.5">{item.detail}</p>
+                        <p className="text-xs text-muted mt-0.5">
+                          {item.actor ? `${displayActor(item.actor)} · ` : ''}{item.detail}
+                        </p>
                       </div>
                     </article>
                   );
@@ -104,4 +112,10 @@ export default function Activity({ events, onClear, userEmail, onOpenSettings })
       )}
     </div>
   );
+}
+
+function displayActor(value) {
+  const text = String(value || '').trim();
+  if (!text.includes('@')) return text;
+  return text.split('@')[0];
 }

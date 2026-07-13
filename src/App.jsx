@@ -9,6 +9,9 @@ import LoginForm from './components/Auth/LoginForm';
 import TabBar from './components/UI/TabBar';
 import ScanHub from './components/Scan/ScanHub';
 import ScreenLoader from './components/UI/ScreenLoader';
+import OfflineBanner from './components/System/OfflineBanner';
+import UndoToast from './components/System/UndoToast';
+import { useUndoManager } from './hooks/useUndoManager';
 import Today from './pages/Today';
 import { normaliserNomCourses } from './lib/matchShoppingItems';
 
@@ -61,6 +64,7 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
   } = useProducts();
   const shopping = useShoppingList();
   const shoppingSession = useShoppingSession();
+  const undoManager = useUndoManager();
   const { perimes, expirentBientot, cetteSemaine, alertCount } = useAlerts(products);
   const activity = useActivityFeed({
     products,
@@ -75,6 +79,72 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cuisineTarget, setCuisineTarget] = useState(null);
 
+  const sessionWithUndo = {
+    ...shoppingSession,
+    startSession: async (startedBy) => {
+      const wasActive = shoppingSession.activeSession;
+      const started = await shoppingSession.startSession(startedBy);
+      if (!wasActive && started?.id) {
+        undoManager.offer('Courses commencées', () => shoppingSession.restoreSession(started.id, {
+          active: false,
+          status: 'cancelled',
+          ended_at: new Date().toISOString(),
+        }));
+      }
+      return started;
+    },
+    finishSession: async () => {
+      const before = shoppingSession.activeSession;
+      await shoppingSession.finishSession();
+      if (before) undoManager.offer('Courses terminées', () => shoppingSession.restoreSession(before.id, {
+        active: true,
+        status: 'active',
+        ended_at: null,
+      }));
+    },
+    cancelSession: async () => {
+      const before = shoppingSession.activeSession;
+      await shoppingSession.cancelSession();
+      if (before) undoManager.offer('Courses annulées', () => shoppingSession.restoreSession(before.id, {
+        active: true,
+        status: 'active',
+        ended_at: null,
+      }));
+    },
+  };
+
+  const shoppingWithUndo = {
+    ...shopping,
+    addItem: async (item) => {
+      const added = await shopping.addItem(item);
+      if (added?.id) undoManager.offer(`${added.nom} ajouté aux courses`, () => shopping.deleteItem(added.id));
+      return added;
+    },
+    updateItem: async (id, fields) => {
+      const before = shopping.items.find((item) => item.id === id);
+      await shopping.updateItem(id, fields);
+      if (before) {
+        const previousFields = Object.fromEntries(Object.keys(fields).map((key) => [key, before[key]]));
+        undoManager.offer(`${before.nom} modifié`, () => shopping.updateItem(id, previousFields));
+      }
+    },
+    deleteItem: async (id) => {
+      const before = shopping.items.find((item) => item.id === id);
+      await shopping.deleteItem(id);
+      if (before) undoManager.offer(`${before.nom} retiré des courses`, () => shopping.addItem(before));
+    },
+    deleteItems: async (ids) => {
+      const before = shopping.items.filter((item) => ids.includes(item.id));
+      await shopping.deleteItems(ids);
+      if (before.length) undoManager.offer(`${before.length} article${before.length > 1 ? 's' : ''} retiré${before.length > 1 ? 's' : ''}`, () => Promise.all(before.map((item) => shopping.addItem(item))));
+    },
+    clearChecked: async () => {
+      const before = shopping.items.filter((item) => item.coche);
+      await shopping.clearChecked();
+      if (before.length) undoManager.offer(`${before.length} article${before.length > 1 ? 's' : ''} retiré${before.length > 1 ? 's' : ''}`, () => Promise.all(before.map((item) => shopping.addItem(item))));
+    },
+  };
+
   const addShoppingItem = async (item) => {
     const incomingName = normaliserNomCourses(item.nom);
     const exists = shopping.items.find((shoppingItem) => {
@@ -85,7 +155,7 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
     });
 
     if (exists) return exists;
-    return shopping.addItem({ ...item, ajoute_par: user?.email ?? null });
+    return shoppingWithUndo.addItem({ ...item, ajoute_par: user?.email ?? null });
   };
 
   const openCuisine = (emplacement = null) => {
@@ -94,12 +164,43 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
   };
 
   const productActions = {
-    updateProduct,
-    updateProductQuantity,
-    decrementProduct,
-    consumeProduct,
-    deleteProduct,
+    updateProduct: async (id, fields) => {
+      const before = products.find((product) => product.id === id);
+      await updateProduct(id, fields);
+      if (before) {
+        const previousFields = Object.fromEntries(Object.keys(fields).map((key) => [key, before[key]]));
+        undoManager.offer(`${before.nom} modifié`, () => updateProduct(id, previousFields));
+      }
+    },
+    updateProductQuantity: async (id, quantity, options) => {
+      const before = products.find((product) => product.id === id);
+      const result = await updateProductQuantity(id, quantity, options);
+      if (before) undoManager.offer(`Quantité de ${before.nom} modifiée`, () => updateProductQuantity(id, before.quantite, options));
+      return result;
+    },
+    decrementProduct: async (id, amount) => {
+      const before = products.find((product) => product.id === id);
+      const result = await decrementProduct(id, amount);
+      if (before) undoManager.offer(`${before.nom} consommé`, () => updateProductQuantity(id, before.quantite));
+      return result;
+    },
+    consumeProduct: async (product, options) => {
+      const result = await consumeProduct(product, options);
+      if (!result?.needsConfirmation) undoManager.offer(`${product.nom} consommé`, () => updateProductQuantity(product.id, result.previousQuantity));
+      return result;
+    },
+    deleteProduct: async (id) => {
+      const before = products.find((product) => product.id === id);
+      await deleteProduct(id);
+      if (before) undoManager.offer(`${before.nom} supprimé du stock`, () => addProduct(before));
+    },
     addShoppingItem,
+  };
+
+  const addProductsWithUndo = async (list, options) => {
+    const inserted = await addProducts(list, options);
+    if (inserted?.length) undoManager.offer(`${inserted.length} produit${inserted.length > 1 ? 's' : ''} ajouté${inserted.length > 1 ? 's' : ''}`, () => Promise.all(inserted.map((product) => deleteProduct(product.id))));
+    return inserted;
   };
 
   const commonHeaderProps = {
@@ -109,6 +210,7 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
 
   return (
     <div className="min-h-screen bg-bg">
+      <OfflineBanner online={shopping.online} pending={shopping.offlinePending} syncing={shopping.syncing} onSync={shopping.syncPending} />
       <main className="max-w-app mx-auto px-4 native-header pb-28">
         <Suspense fallback={<ScreenLoader label="Chargement de l’écran" />}>
           {tab === 'aujourdhui' && (
@@ -119,8 +221,8 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
               perimes={perimes}
               expirentBientot={expirentBientot}
               cetteSemaine={cetteSemaine}
-              shopping={shopping}
-              shoppingSession={shoppingSession}
+              shopping={shoppingWithUndo}
+              shoppingSession={sessionWithUndo}
               actions={productActions}
               onOpenScan={(mode) => setScan(mode ?? 'hub')}
               onOpenCuisine={openCuisine}
@@ -143,8 +245,8 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
           {tab === 'courses' && (
             <Courses
               products={products}
-              shopping={shopping}
-              session={shoppingSession}
+              shopping={shoppingWithUndo}
+              session={sessionWithUndo}
               userEmail={user?.email}
               addShoppingItem={addShoppingItem}
               onScanReceipt={() => setScan('receipt')}
@@ -165,12 +267,12 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
           <AddFlow
             mode={scan}
             onClose={() => setScan(null)}
-            addProducts={addProducts}
+            addProducts={addProductsWithUndo}
             addProduct={addProduct}
             products={products}
-            updateProduct={updateProduct}
-            shopping={shopping}
-            shoppingSession={shoppingSession}
+            updateProduct={productActions.updateProduct}
+            shopping={shoppingWithUndo}
+            shoppingSession={sessionWithUndo}
             userEmail={user?.email}
           />
         </Suspense>
@@ -185,6 +287,7 @@ function ConnectedApp({ user, signOut, tab, setTab }) {
           </div>
         </div>
       )}
+      <UndoToast entry={undoManager.entry} onUndo={undoManager.undo} onClose={undoManager.clear} />
     </div>
   );
 }

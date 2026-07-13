@@ -4,14 +4,11 @@
 import { z } from 'zod';
 import { estimerDLCString } from './dlc_estimees';
 import { categorieSansDLC } from './dateExpiration';
-import { runtimeConfig } from '../config/runtime';
+import { postGemini } from './geminiProxy';
 
-const GEMINI_API_KEY = runtimeConfig.geminiApiKey;
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
-
-const MAX_IMAGE_WIDTH = 1600;
-const JPEG_QUALITY = 0.85;
+const MAX_IMAGE_WIDTH = 1280;
+const JPEG_QUALITY = 0.8;
+const MAX_SOURCE_FILE_BYTES = 15 * 1024 * 1024;
 const OUTPUT_MIME_TYPE = 'image/jpeg';
 
 export const RECEIPT_CATEGORIES = [
@@ -182,16 +179,13 @@ const GEMINI_RESPONSE_SCHEMA = {
  * @returns {Promise<{items: Array, uncertain_items: Array}>}
  */
 export async function analyserTicketCaisse(input) {
-  if (!GEMINI_API_KEY) {
-    throw new Error(
-      'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env.local'
-    );
-  }
-
   const files = Array.isArray(input) ? input : [input];
   const cleanFiles = files.filter(Boolean);
   if (cleanFiles.length === 0) {
     throw new Error('Ajoutez au moins une photo du ticket.');
+  }
+  if (cleanFiles.some((file) => file.size > MAX_SOURCE_FILE_BYTES)) {
+    throw new Error('Une photo dépasse 15 Mo. Recadrez le ticket avant analyse.');
   }
 
   const images = await Promise.all(cleanFiles.map(preparerImageTicket));
@@ -264,16 +258,7 @@ async function appelerGeminiTicket(images) {
     },
   };
 
-  let response;
-  try {
-    response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    throw new Error('Impossible de joindre le service Gemini. Vérifiez votre connexion.');
-  }
+  const response = await postGemini('receipt', body);
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');

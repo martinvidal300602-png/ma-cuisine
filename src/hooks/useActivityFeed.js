@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'ma-cuisine:v3-activity';
 const MAX_EVENTS = 80;
@@ -20,12 +21,13 @@ function persist(events) {
   }
 }
 
-function event(type, title, detail, timestamp, entityId, source = 'history') {
+function event(type, title, detail, timestamp, entityId, source = 'history', actor = null) {
   return {
     id: `${source}:${type}:${entityId || title}:${timestamp || Date.now()}`,
     type,
     title,
     detail,
+    actor,
     timestamp: timestamp || new Date().toISOString(),
   };
 }
@@ -105,6 +107,32 @@ export function useActivityFeed({ products, productsLoading, shoppingItems, shop
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadServerEvents = async () => {
+      const { data, error } = await supabase
+        .from('evenements')
+        .select('id, type, title, detail, actor_email, created_at, payload')
+        .order('created_at', { ascending: false })
+        .limit(MAX_EVENTS);
+      if (!active || error || !data) return;
+      addEvents(data.map(mapServerEvent));
+    };
+
+    void loadServerEvents();
+    const channel = supabase
+      .channel('v3-events-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'evenements' }, ({ new: row }) => {
+        if (active && row) addEvents([mapServerEvent(row)]);
+      })
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [addEvents]);
 
   useEffect(() => {
     if (productsLoading || shoppingLoading || sessionsLoading || seeded.current) return;
@@ -191,10 +219,11 @@ export function useActivityFeed({ products, productsLoading, shoppingItems, shop
       if (!previous) {
         changes.push(event('shopping_started', 'Courses commencées', session.started_by || 'Session familiale', session.started_at, session.id, 'live'));
       } else if (previous.status !== session.status) {
+        const reopened = session.status === 'active';
         changes.push(
           event(
-            session.status === 'cancelled' ? 'shopping_cancelled' : 'shopping_finished',
-            session.status === 'cancelled' ? 'Courses annulées' : 'Courses terminées',
+            reopened ? 'shopping_reopened' : session.status === 'cancelled' ? 'shopping_cancelled' : 'shopping_finished',
+            reopened ? 'Courses reprises' : session.status === 'cancelled' ? 'Courses annulées' : 'Courses terminées',
             session.started_by || 'Session familiale',
             session.ended_at,
             session.id,
@@ -214,4 +243,16 @@ export function useActivityFeed({ products, productsLoading, shoppingItems, shop
   }, []);
 
   return { events, clear };
+}
+
+function mapServerEvent(row) {
+  return {
+    id: `server:${row.id}`,
+    type: row.type,
+    title: row.title,
+    detail: row.detail,
+    actor: row.actor_email || null,
+    payload: row.payload || {},
+    timestamp: row.created_at,
+  };
 }

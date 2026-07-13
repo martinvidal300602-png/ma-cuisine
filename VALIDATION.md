@@ -1,102 +1,95 @@
-# Validation finale — Ma Cuisine V3
+# Validation finale — Ma Cuisine V3 intelligente
 
 Date : 13 juillet 2026
 Branche : `codex/ma-cuisine-v3`
 
-## Commandes exécutées
+## Résultats automatisés
+
+Commandes exécutées sur le dépôt final :
 
 ```bash
-npm ci --no-audit --no-fund
 npm run validate
 npm test
 npm run build
+npm audit --omit=dev --audit-level=high
 git diff --check
-git status --short --branch
 ```
 
-## Résultats automatisés
-
-- `npm ci` : réussi, 145 paquets installés.
-- `npm run validate` : réussi.
-- `npm test` : 4 tests réussis, 0 échec.
-- `npm run build` : réussi, 2 159 modules transformés.
-- `git diff --check` : aucune erreur d’espace ou de conflit.
+- `npm run validate` : réussi ; invariants V3, proxy Gemini, foyer/RLS, PWA et chargement différé conformes.
+- `npm test` : 10 tests réussis, 0 échec.
+- `npm run build` : réussi ; 2 173 modules transformés et service worker Workbox généré.
+- audit des dépendances de production : 0 vulnérabilité.
+- `git diff --check` : aucune erreur d’espace ou marqueur de conflit.
 
 Dernier build mesuré :
 
 | Chunk | Taille | Gzip | Chargement |
 |---|---:|---:|---|
-| Entrée/configuration | 152,45 kB | 49,14 kB | initial |
-| Application connectée | 272,11 kB | 71,78 kB | après configuration |
-| Activité | 5,38 kB | 2,06 kB | à l’ouverture |
-| Courses | 16,26 kB | 4,97 kB | à l’ouverture |
-| Cuisine | 17,77 kB | 5,47 kB | à l’ouverture |
-| Réglages | 8,29 kB | 2,80 kB | à l’ouverture |
-| Flux Scanner | 125,28 kB | 35,77 kB | après choix d’un mode |
+| Entrée/configuration | 152,27 kB | 49,06 kB | initial |
+| Application connectée | 298,38 kB | 80,27 kB | après configuration |
+| Activité | 5,29 kB | 2,06 kB | à l’ouverture |
+| Réglages | 10,79 kB | 3,63 kB | à l’ouverture |
+| Courses | 20,97 kB | 6,80 kB | à l’ouverture |
+| Cuisine | 21,26 kB | 6,48 kB | à l’ouverture |
+| Flux d’ajout | 128,07 kB | 36,88 kB | après choix d’un mode |
 | ZXing | 411,38 kB | 107,69 kB | scan code-barres uniquement |
 
-## Invariants contrôlés
+La PWA précache 23 ressources, soit environ 1,05 Mio. Les requêtes `/api/` ne reçoivent pas de réponse de navigation mise en cache.
+
+## Couverture métier
+
+Les tests automatisés couvrent :
+
+- détection et fusion des doublons avec conservation de la DLC la plus proche ;
+- rapprochement ticket et maintien des articles non achetés ;
+- consommation par unité, quantité ou fraction ;
+- cinq états de confiance du stock selon preuves, ancienneté et absences ;
+- comparaison photo entre produits présents, nouveaux, retirés probables et ambigus ;
+- suggestions de repas limitées au stock réellement disponible ;
+- suggestions de courses expliquées par l’historique d’achat ;
+- estimation de DLC ;
+- fusion et synchronisation de la file de mutations hors ligne.
+
+## Invariants et sécurité
 
 - Les quatre emplacements restent exactement : `Frigo`, `Placard sous fenêtre`, `Plan de travail`, `Placard épices`.
-- Gemini reste sur `gemini-2.5-flash-lite` pour les photos et les tickets.
-- Les deux flux Gemini importent Zod et utilisent `safeParse`.
-- Le pipeline photo conserve `full` et les six crops haut/milieu/bas, gauche/droite.
-- ZXing est importé par `await import('@zxing/browser')`.
-- Cuisine, Courses, Activité, Réglages et AddFlow utilisent des imports dynamiques.
-- Le manifest est un JSON valide, en mode `standalone`, orientation portrait, avec icônes 192 et 512.
-- Les fichiers PNG mesurent bien 180, 192 et 512 pixels.
-- Le service worker est enregistré uniquement en production et ne met pas en cache les appels `/api/`.
-- `.gitignore` exclut `node_modules`, `dist`, `.env`, `.env.local` et `.vercel`.
-- Aucun `.env` ni `.env.local` n’est suivi par Git ; seul `.env.example` est versionné.
-- Aucun schéma, nom de table ou nom de colonne Supabase n’a été modifié.
-- Aucune migration V3 n’a été créée ou exécutée.
+- Les analyses photo et ticket utilisent `gemini-2.5-flash-lite` via `/api/gemini`.
+- La clé Gemini n’est jamais exposée dans le bundle client.
+- Le proxy vérifie le jeton Supabase, limite le débit et borne les images, le prompt et la durée d’appel.
+- Les réponses Gemini sont normalisées puis validées localement avec Zod avant présentation humaine.
+- Aucun résultat ambigu d’une photo ou d’un ticket n’est écrit automatiquement.
+- Le cron de notification exige `CRON_SECRET` et les erreurs serveur ne divulguent pas les secrets.
+- ZXing et les grandes pages restent chargés à la demande.
+- `.gitignore` exclut les fichiers d’environnement, `node_modules`, `dist` et `.vercel`.
 
-## Tests métier
+## Migration Supabase
 
-- détection de doublon limitée à une marque compatible et au même emplacement ;
-- fusion des quantités et conservation de la DLC la plus proche ;
-- rapprochement d’un libellé ticket abrégé avec la liste ;
-- conservation des articles non achetés ;
-- modes de consommation par unités, quantité restante et fraction.
+La migration `supabase/migrations/20260713_v3_intelligence_foundations.sql` a été créée séparément et **n’a pas été exécutée**. Elle doit d’abord être relue puis appliquée sur un projet de prévisualisation.
+
+Elle ajoute les foyers et rôles, les preuves de confiance, l’historique produit, les événements, les analyses photo structurées, les tickets structurés et les préférences utilisateur. Elle conserve les tables, colonnes et valeurs d’emplacement existantes, puis remplace les politiques génériques par des politiques RLS liées au foyer.
+
+Avant migration, les nouvelles écritures annexes restent tolérantes à l’absence des tables ; les flux historiques continuent de fonctionner. Après migration, les fonctionnalités famille, historique persistant et activité multi-utilisateur deviennent complètes.
 
 ## Contrôle navigateur mobile
 
-Contrôle effectué dans un viewport iPhone de 390 × 844 pixels :
+Contrôle visuel réalisé dans le navigateur intégré avec un viewport mobile :
 
-- sans variables Supabase : écran de configuration lisible, aucune page blanche ;
-- avec configuration Supabase fictive : écran de connexion complet, champs de 48 px et CTA accessible ;
-- aucune erreur JavaScript observée sur ces deux états publics.
+- écran de configuration sans débordement horizontal ;
+- cible du bouton de copie portée à 44 × 44 px ;
+- écran de connexion complet sans débordement ;
+- champs et CTA de 48 px, avec texte de saisie à 16 px pour éviter le zoom Safari ;
+- aucune erreur JavaScript sur les états publics testés.
 
-## Flux relus sans modification métier
+Les écrans authentifiés n’ont pas été ouverts faute d’identifiants de test ; aucune donnée distante n’a été modifiée.
 
-- Auth Supabase et persistance de session ;
-- rafraîchissement Realtime du stock, de la liste et des sessions ;
-- ajout simple et en masse ;
-- résolution humaine des doublons avant écriture ;
-- scan OpenFoodFacts ;
-- validation humaine des résultats photo Gemini ;
-- ticket, rapprochement, suppression des achetés et maintien des non-achetés ;
-- fin de session de courses ;
-- notification ntfy côté Vercel.
+## Recette avec les vrais services
 
-## Tests à effectuer avec les vrais services
+À effectuer sur une URL de prévisualisation HTTPS après application contrôlée de la migration :
 
-Ces contrôles nécessitent des identifiants, une caméra et les données de production ; ils ne peuvent pas être simulés de manière fiable dans le dépôt :
-
-1. connexion avec un compte familial ;
-2. synchronisation entre deux iPhone ;
-3. scan d’un code-barres réel ;
-4. photo d’un emplacement avec validation partielle d’un résultat ambigu ;
-5. ticket réel avec article coché absent du ticket et article non coché ;
-6. notification ntfy et cron Vercel ;
-7. installation depuis Safari sur l’écran d’accueil.
-
-## Procédure iPhone recommandée
-
-1. Déployer la branche sur une URL Vercel de prévisualisation HTTPS.
-2. Ouvrir l’URL dans Safari et se connecter.
-3. Utiliser **Partager → Sur l’écran d’accueil**.
-4. Vérifier les safe areas en portrait et le mode sombre automatique.
-5. Tester successivement manuel, code-barres, photo et ticket.
-6. Lancer une session courses sur un iPhone et cocher un article depuis un second.
-7. Terminer par le ticket et confirmer que les non-achetés restent sur la liste.
+1. vérifier la connexion et la création/reprise du foyer ;
+2. tester la synchronisation entre deux comptes et les rôles administrateur/membre ;
+3. comparer une vraie photo, décocher un résultat ambigu puis valider ;
+4. scanner un ticket réel et contrôler le rapprochement avec les courses ;
+5. passer hors ligne, modifier la liste puis vérifier la reprise de synchronisation ;
+6. rouvrir une session via l’annulation temporaire ;
+7. tester la notification cron et l’installation iPhone depuis Safari.

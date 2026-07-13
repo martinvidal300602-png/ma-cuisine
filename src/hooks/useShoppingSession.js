@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { recordEvent } from '../lib/eventLog';
 
 export function useShoppingSession() {
   const [activeSession, setActiveSession] = useState(null);
@@ -66,6 +67,14 @@ export function useShoppingSession() {
 
       if (err) throw new Error('Démarrage des courses impossible : ' + err.message);
       setActiveSession(data);
+      void recordEvent({
+        type: 'shopping_started',
+        entityType: 'courses_session',
+        entityId: data.id,
+        title: 'Courses commencées',
+        detail: startedBy || 'Session familiale',
+        payload: { after: data },
+      });
       return data;
     },
     [fetchActiveSession]
@@ -80,6 +89,14 @@ export function useShoppingSession() {
         .eq('id', activeSession.id);
 
       if (err) throw new Error('Impossible de terminer les courses : ' + err.message);
+      void recordEvent({
+        type: 'shopping_finished',
+        entityType: 'courses_session',
+        entityId: activeSession.id,
+        title: 'Courses terminées',
+        detail: activeSession.started_by || 'Session familiale',
+        payload: { before: activeSession },
+      });
       await fetchActiveSession();
     },
     [activeSession, fetchActiveSession]
@@ -94,10 +111,38 @@ export function useShoppingSession() {
         .eq('id', activeSession.id);
 
       if (err) throw new Error("Impossible d'annuler les courses : " + err.message);
+      void recordEvent({
+        type: 'shopping_cancelled',
+        entityType: 'courses_session',
+        entityId: activeSession.id,
+        title: 'Courses annulées',
+        detail: activeSession.started_by || 'Session familiale',
+        payload: { before: activeSession },
+      });
       await fetchActiveSession();
     },
     [activeSession, fetchActiveSession]
   );
+
+  const restoreSession = useCallback(async (id, fields) => {
+    const { data, error: err } = await supabase
+      .from('courses_sessions')
+      .update(fields)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (err) throw new Error('Restauration de la session impossible : ' + err.message);
+    void recordEvent({
+      type: fields.status === 'active' ? 'shopping_reopened' : 'shopping_cancelled',
+      entityType: 'courses_session',
+      entityId: id,
+      title: fields.status === 'active' ? 'Courses reprises' : 'Démarrage des courses annulé',
+      detail: data.started_by || 'Session familiale',
+      payload: { after: data },
+    });
+    await fetchActiveSession();
+    return data;
+  }, [fetchActiveSession]);
 
   return {
     activeSession,
@@ -107,6 +152,7 @@ export function useShoppingSession() {
     startSession,
     finishSession,
     cancelSession,
+    restoreSession,
     refresh: fetchActiveSession,
   };
 }

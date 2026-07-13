@@ -4,6 +4,9 @@ import Button from '../UI/Button';
 import { analyserPhotoFrigo } from '../../lib/gemini';
 import { appliquerDateExpirationEstimee, categorieSansDLC } from '../../lib/dateExpiration';
 import { CATEGORIES, DEFAULT_EMPLACEMENT, EMPLACEMENTS, normaliserEmplacement } from './ManualForm';
+import { comparePhotoToStock, rememberPhotoAnalysis } from '../../lib/photoComparison';
+import { recordEvent } from '../../lib/eventLog';
+import { persistPhotoValidation } from '../../lib/photoPersistence';
 
 const isDev = import.meta.env.DEV;
 
@@ -11,13 +14,15 @@ const isDev = import.meta.env.DEV;
  * Mode A - photo large du frigo/placard analysée par Gemini.
  * Les produits fiables ou à vérifier passent toujours par une validation humaine.
  */
-export default function FridgePhoto({ onSubmitMany, userEmail }) {
+export default function FridgePhoto({ onSubmitMany, onUpdateExisting, existingProducts = [], userEmail }) {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState(null);
   const [detected, setDetected] = useState([]);
   const [uncertain, setUncertain] = useState([]);
+  const [stillPresent, setStillPresent] = useState([]);
+  const [possiblyRemoved, setPossiblyRemoved] = useState([]);
   const [selectedEmplacement, setSelectedEmplacement] = useState(DEFAULT_EMPLACEMENT);
   const [adding, setAdding] = useState(false);
   const [done, setDone] = useState(false);
@@ -28,6 +33,8 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     setFile(f);
     setDetected([]);
     setUncertain([]);
+    setStillPresent([]);
+    setPossiblyRemoved([]);
     setError(null);
     setDone(false);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -42,23 +49,26 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     try {
       const emplacement = normaliserEmplacement(selectedEmplacement);
       const result = await analyserPhotoFrigo(file, emplacement);
+      const rawProducts = [...result.items_high_confidence, ...result.items_to_verify];
+      const comparison = comparePhotoToStock(rawProducts, existingProducts, emplacement, result.uncertain_items);
       const produits = [
-        ...result.items_high_confidence.map((p) => ({
-          ...p,
-          selected: p.confidence === 'high' && p.visible_part === 'complete',
-        })),
-        ...result.items_to_verify.map((p) => ({ ...p, selected: false })),
+        ...comparison.newItems.map((p) => ({ ...p, selected: true, comparisonStatus: 'nouveau' })),
+        ...comparison.toVerify.map((p) => ({ ...p, selected: false, comparisonStatus: 'a_verifier' })),
       ];
 
-      setUncertain(result.uncertain_items);
+      setUncertain(comparison.uncertainItems);
+      setStillPresent(comparison.stillPresent);
+      setPossiblyRemoved(comparison.possiblyRemoved.map((product) => ({ ...product, selected: false })));
 
       if (produits.length === 0) {
         setDetected([]);
-        setError(
-          result.uncertain_items.length > 0
-            ? 'Aucun produit assez fiable pour être ajouté. Vérifiez les éléments incertains ci-dessous.'
-            : "Aucun produit n'a été détecté sur cette photo."
-        );
+        if (comparison.stillPresent.length === 0 && comparison.possiblyRemoved.length === 0) {
+          setError(
+            result.uncertain_items.length > 0
+              ? 'Aucun produit assez fiable pour être ajouté. Vérifiez les éléments incertains ci-dessous.'
+              : "Aucun produit n'a été détecté sur cette photo."
+          );
+        }
         return;
       }
 
@@ -101,12 +111,13 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
   };
 
   const selectedCount = detected.filter((d) => d.selected).length;
+  const removedCount = possiblyRemoved.filter((product) => product.selected).length;
   const highConfidence = detected
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.confidence === 'high');
+    .filter(({ item }) => item.comparisonStatus === 'nouveau');
   const itemsToVerify = detected
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => item.confidence === 'medium');
+    .filter(({ item }) => item.comparisonStatus === 'a_verifier');
 
   const handleAddAll = async () => {
     const checkedItems = detected.filter((d) => d.selected && d.nom.trim() && d.confidence !== 'low');
@@ -115,18 +126,53 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
     logPhotoDebug('items cochés', checkedItems);
     logPhotoDebug('payload envoyé à Supabase', toAdd);
 
-    if (toAdd.length === 0) {
-      setError('Sélectionnez au moins un produit avec un nom.');
+    const toExhaust = possiblyRemoved.filter((product) => product.selected);
+
+    if (toAdd.length === 0 && toExhaust.length === 0 && stillPresent.length === 0) {
+      setError('Validez au moins une différence ou une présence avant de continuer.');
       return;
     }
 
     setAdding(true);
     setError(null);
     try {
-      const inserted = await onSubmitMany(toAdd);
+      const inserted = toAdd.length > 0 ? await onSubmitMany(toAdd) : [];
+      if (onUpdateExisting) {
+        for (const product of toExhaust) {
+          await onUpdateExisting(product.id, { quantite: 0 });
+        }
+      }
       logPhotoDebug('réponse Supabase', inserted);
+      rememberPhotoAnalysis(normaliserEmplacement(selectedEmplacement));
+      void recordEvent({
+        type: 'photo_analyzed',
+        entityType: 'analyse_photo',
+        title: 'Photo analysée',
+        detail: photoValidationDetail(
+          normaliserEmplacement(selectedEmplacement),
+          toAdd.length + toExhaust.length,
+          stillPresent.length,
+        ),
+        payload: {
+          emplacement: normaliserEmplacement(selectedEmplacement),
+          addedIds: inserted.map((product) => product.id),
+          exhaustedIds: toExhaust.map((product) => product.id),
+          stillPresentIds: stillPresent.map(({ existing }) => existing.id),
+          uncertainCount: uncertain.length,
+        },
+      });
+      void persistPhotoValidation({
+        emplacement: normaliserEmplacement(selectedEmplacement),
+        added: detected.filter((item) => item.selected && item.comparisonStatus === 'nouveau'),
+        toVerify: detected.filter((item) => item.comparisonStatus === 'a_verifier'),
+        stillPresent,
+        possiblyRemoved,
+        uncertain,
+      });
       setDetected([]);
       setUncertain([]);
+      setStillPresent([]);
+      setPossiblyRemoved([]);
       setFile(null);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
@@ -192,17 +238,17 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
         )}
         {done && !error && (
           <p role="status" className="text-accent text-sm">
-            Produits ajoutés au stock.
+            Comparaison validée et stock mis à jour.
           </p>
         )}
       </div>
 
-      {(detected.length > 0 || uncertain.length > 0) && (
+      {(detected.length > 0 || uncertain.length > 0 || stillPresent.length > 0 || possiblyRemoved.length > 0) && (
         <div className="space-y-3">
           {highConfidence.length > 0 && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-muted">
-                À valider avant ajout ({highConfidence.length})
+                Nouveaux produits ({highConfidence.length})
               </h3>
               {highConfidence.map(({ item, index }) =>
                 renderDetectedItem(item, index, updateItem, inputClass)
@@ -218,6 +264,43 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
               {itemsToVerify.map(({ item, index }) =>
                 renderDetectedItem(item, index, updateItem, inputClass)
               )}
+            </section>
+          )}
+
+          {possiblyRemoved.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted">
+                Produits probablement retirés ({possiblyRemoved.length})
+              </h3>
+              <p className="text-xs text-muted">Cochez uniquement ceux que vous confirmez comme épuisés.</p>
+              {possiblyRemoved.map((product, index) => (
+                <label key={product.id} className={`pressable bg-card rounded-card border p-3 flex items-center gap-3 ${product.selected ? 'border-fresh-expired' : 'border-border'}`}>
+                  <input
+                    type="checkbox"
+                    checked={product.selected}
+                    onChange={(event) => setPossiblyRemoved((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, selected: event.target.checked } : item))}
+                    className="w-5 h-5 accent-[var(--color-danger)]"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold truncate">{product.nom}</span>
+                    <span className="block text-xs text-muted">Quantité actuelle : {product.quantite} {product.unite}</span>
+                  </span>
+                </label>
+              ))}
+            </section>
+          )}
+
+          {stillPresent.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted">Toujours présents ({stillPresent.length})</h3>
+              <div className="bg-card rounded-card border border-border divide-y divide-border">
+                {stillPresent.map(({ existing }) => (
+                  <div key={existing.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium truncate">{existing.nom}</span>
+                    <span className="text-xs text-fresh-ok font-semibold">Confirmé</span>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
 
@@ -240,11 +323,13 @@ export default function FridgePhoto({ onSubmitMany, userEmail }) {
             </section>
           )}
 
-          {detected.length > 0 && (
-            <Button size="lg" onClick={handleAddAll} disabled={adding || selectedCount === 0}>
+          {(detected.length > 0 || possiblyRemoved.length > 0 || stillPresent.length > 0) && (
+            <Button size="lg" onClick={handleAddAll} disabled={adding || selectedCount + removedCount + stillPresent.length === 0}>
               {adding
-                ? 'Ajout en cours…'
-                : `Ajouter ${selectedCount} produit${selectedCount > 1 ? 's' : ''} sélectionné${selectedCount > 1 ? 's' : ''}`}
+                ? 'Validation en cours…'
+                : selectedCount + removedCount > 0
+                  ? `Valider ${selectedCount + removedCount} changement${selectedCount + removedCount > 1 ? 's' : ''}`
+                  : `Confirmer ${stillPresent.length} présence${stillPresent.length > 1 ? 's' : ''}`}
             </Button>
           )}
         </div>
@@ -275,6 +360,12 @@ function logPhotoDebug(label, value) {
   if (isDev) {
     console.log(`[photo-stock] ${label}`, value);
   }
+}
+
+function photoValidationDetail(emplacement, changeCount, presenceCount) {
+  const changes = `${changeCount} changement${changeCount > 1 ? 's' : ''}`;
+  const presences = `${presenceCount} présence${presenceCount > 1 ? 's' : ''} confirmée${presenceCount > 1 ? 's' : ''}`;
+  return `${emplacement} · ${changes}, ${presences}`;
 }
 
 function renderDetectedItem(item, index, updateItem, inputClass) {

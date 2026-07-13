@@ -37,11 +37,3 @@ if (!runtimeConfig.hasSupabase) {
 function CrashAtStartup({ error }) {
   throw error;
 }
-
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.warn("Le service worker n'a pas pu être enregistré.", error);
-    });
-  });
-}

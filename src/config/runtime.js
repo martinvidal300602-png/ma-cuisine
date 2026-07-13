@@ -1,13 +1,13 @@
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
-const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY?.trim();
 
 export const runtimeConfig = Object.freeze({
   supabaseUrl,
   supabaseAnonKey,
-  geminiApiKey,
+  geminiApiPath: '/api/gemini',
+  geminiMode: 'server',
   hasSupabase: Boolean(supabaseUrl && supabaseAnonKey),
-  hasGemini: Boolean(geminiApiKey),
+  hasGemini: true,
 });
 
 export const missingRequiredVariables = [
