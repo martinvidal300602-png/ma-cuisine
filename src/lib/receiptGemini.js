@@ -4,8 +4,9 @@
 import { z } from 'zod';
 import { estimerDLCString } from './dlc_estimees';
 import { categorieSansDLC } from './dateExpiration';
+import { runtimeConfig } from '../config/runtime';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_API_KEY = runtimeConfig.geminiApiKey;
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
 
@@ -183,7 +184,7 @@ const GEMINI_RESPONSE_SCHEMA = {
 export async function analyserTicketCaisse(input) {
   if (!GEMINI_API_KEY) {
     throw new Error(
-      'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env'
+      'Clé Gemini manquante : définissez VITE_GEMINI_API_KEY dans votre fichier .env.local'
     );
   }
 

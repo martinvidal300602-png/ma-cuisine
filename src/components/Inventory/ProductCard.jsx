@@ -1,13 +1,14 @@
 // src/components/Inventory/ProductCard.jsx
 import { useState } from 'react';
-import Badge from '../UI/Badge';
 import { joursRestants } from '../../hooks/useAlerts';
 import AddToListButton from '../Shopping/AddToListButton';
 import UseProductModal from './UseProductModal';
 import EmptyProductSheet from './EmptyProductSheet';
+import Icon from '../UI/Icon';
 import { formatQuantite, getConsumeMode, quantiteConsommation } from '../../lib/productConsumption';
+import { jChip, toneClasses, toneVar } from '../../lib/freshness';
 
-// Placeholder emoji par catégorie quand le produit n'a pas de photo
+// Vignette emoji par catégorie quand le produit n'a pas de photo
 const EMOJIS = {
   'Viandes & Poissons': '🥩',
   'Légumes & Fruits': '🥦',
@@ -25,15 +26,6 @@ const EMOJIS = {
   'Autre': '🍽️',
 };
 
-function badgeExpiration(dateExpiration) {
-  const jours = joursRestants(dateExpiration);
-  if (jours === null) return { variant: 'neutral', label: 'Sans date' };
-  if (jours < 0) return { variant: 'danger', label: `Périmé (${Math.abs(jours)} j)` };
-  if (jours === 0) return { variant: 'warn', label: "Expire aujourd'hui" };
-  if (jours <= 3) return { variant: 'warn', label: `${jours} j restants` };
-  return { variant: 'ok', label: `${jours} j restants` };
-}
-
 export default function ProductCard({
   product,
   onUpdateQuantity,
@@ -48,10 +40,13 @@ export default function ProductCard({
   const [error, setError] = useState(null);
   const [useModalOpen, setUseModalOpen] = useState(false);
   const [emptySheetOpen, setEmptySheetOpen] = useState(false);
+  const [imgBroken, setImgBroken] = useState(false);
 
-  const badge = badgeExpiration(product.date_expiration);
+  const jours = joursRestants(product.date_expiration);
+  const chip = jChip(jours);
   const consumeMode = getConsumeMode(product);
   const isCount = consumeMode === 'count';
+  const emoji = EMOJIS[product.categorie] ?? EMOJIS['Autre'];
 
   const commitQty = async () => {
     const rawValue = Number(qtyValue);
@@ -88,6 +83,19 @@ export default function ProductCard({
     setError(null);
     try {
       await onDecrementProduct(product.id, 1);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleIncrement = async () => {
+    const current = Number(product.quantite || 0);
+    setBusy(true);
+    setError(null);
+    try {
+      await onUpdateQuantity(product.id, current + 1, { mode: consumeMode });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -170,39 +178,59 @@ export default function ProductCard({
   };
 
   return (
-    <article className="bg-card rounded-card border border-border shadow-sm p-3 flex gap-3 items-start">
-      {/* Photo ou emoji */}
-      <div className="w-14 h-14 rounded-card bg-bg border border-border flex items-center justify-center overflow-hidden shrink-0">
-        {product.photo_url ? (
-          <img
-            src={product.photo_url}
-            alt={product.nom}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-        ) : (
-          <span className="text-2xl" aria-hidden="true">
-            {EMOJIS[product.categorie] ?? EMOJIS['Autre']}
-          </span>
-        )}
-      </div>
-
-      {/* Infos */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="font-semibold text-sm truncate">{product.nom}</h3>
-            {product.marque && <p className="text-xs text-muted truncate">{product.marque}</p>}
-          </div>
-          <Badge variant={badge.variant}>{badge.label}</Badge>
+    <article
+      className="bg-card rounded-card border border-border shadow-card p-3 pl-4 relative overflow-hidden"
+      style={{ boxShadow: `inset 3px 0 0 ${toneVar(chip.tone)}` }}
+    >
+      <div className="flex items-start gap-3">
+        {/* Vignette photo ou emoji */}
+        <div className="w-11 h-11 rounded-[10px] bg-bg border border-border flex items-center justify-center overflow-hidden shrink-0">
+          {product.photo_url && !imgBroken ? (
+            <img
+              src={product.photo_url}
+              alt=""
+              className="w-full h-full object-cover"
+              onError={() => setImgBroken(true)}
+            />
+          ) : (
+            <span className="text-xl" aria-hidden="true">
+              {emoji}
+            </span>
+          )}
         </div>
 
-        <p className="text-xs text-muted mt-1">📍 {product.emplacement ?? '—'}</p>
+        {/* Nom, marque, emplacement */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-[15px] leading-tight truncate">{product.nom}</h3>
+          {product.marque && <p className="text-xs text-muted truncate mt-0.5">{product.marque}</p>}
+          <p className="text-xs text-muted mt-1 flex items-center gap-1">
+            <Icon name="pin" size={12} />
+            {product.emplacement ?? '—'}
+          </p>
+        </div>
 
-        <div className="flex items-center justify-between mt-2">
-          {/* Quantité modifiable inline */}
+        {/* Pastille jours restants */}
+        <div className={`j-chip ${toneClasses(chip.tone)}`} role="img" aria-label={chip.aria}>
+          <span className="j-num">{chip.num}</span>
+          <span className="j-lab">{chip.label}</span>
+        </div>
+      </div>
+
+      {/* Quantité + actions */}
+      <div className="flex items-center justify-between gap-2 mt-3">
+        <div className="flex items-center gap-1.5">
+          {isCount && (
+            <button
+              type="button"
+              onClick={handleDecrement}
+              disabled={busy}
+              aria-label="Retirer 1"
+              className="w-8 h-8 rounded-full border border-border bg-card flex items-center justify-center text-text hover:border-accent hover:text-accent disabled:opacity-50 transition-colors"
+            >
+              <Icon name="minus" size={15} strokeWidth={2.2} />
+            </button>
+          )}
+
           {editingQty ? (
             <input
               type="number"
@@ -213,7 +241,7 @@ export default function ProductCard({
               onChange={(e) => setQtyValue(e.target.value)}
               onBlur={commitQty}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-              className="font-num w-20 px-2 py-1 text-sm rounded border border-accent bg-bg"
+              className="font-num w-20 px-2 py-1.5 text-sm rounded-lg border border-accent bg-bg"
               aria-label="Modifier la quantité"
             />
           ) : (
@@ -225,56 +253,52 @@ export default function ProductCard({
               }}
               disabled={busy}
               aria-label={`Quantité : ${formatQuantite(product.quantite, product.unite, consumeMode)}. Toucher pour modifier`}
-              className="font-num text-sm px-2 py-1 rounded bg-accent-light text-accent font-medium"
+              className="font-num text-sm px-2.5 py-1.5 rounded-lg bg-bg border border-border font-medium hover:border-accent transition-colors"
             >
               {formatQuantite(product.quantite, product.unite, consumeMode)}
             </button>
           )}
 
+          {isCount && (
+            <button
+              type="button"
+              onClick={handleIncrement}
+              disabled={busy}
+              aria-label="Ajouter 1"
+              className="w-8 h-8 rounded-full border border-border bg-card flex items-center justify-center text-text hover:border-accent hover:text-accent disabled:opacity-50 transition-colors"
+            >
+              <Icon name="plus" size={15} strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => setUseModalOpen(true)}
+            disabled={busy}
+            className="text-accent text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-accent-light disabled:opacity-50 transition-colors"
+          >
+            Utiliser
+          </button>
+          {onAddShoppingItem && <AddToListButton product={product} onAdd={onAddShoppingItem} />}
           <button
             type="button"
             onClick={handleDelete}
             disabled={busy}
             aria-label={`Supprimer ${product.nom}`}
-            className="text-muted hover:text-danger text-sm px-2 py-1 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-fresh-expired hover:bg-fresh-expired-bg transition-colors"
           >
-            🗑️
+            <Icon name="trash" size={16} />
           </button>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          {isCount && (
-            <button
-              type="button"
-              onClick={handleDecrement}
-              disabled={busy}
-              className="text-accent text-xs px-2 py-1 rounded bg-accent-light font-medium disabled:opacity-50"
-            >
-              −1
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setUseModalOpen(true)}
-            disabled={busy}
-            className="text-accent text-xs px-2 py-1 rounded bg-accent-light font-medium disabled:opacity-50"
-          >
-            Utiliser
-          </button>
-        </div>
-
-        {onAddShoppingItem && (
-          <div className="mt-2">
-            <AddToListButton product={product} onAdd={onAddShoppingItem} />
-          </div>
-        )}
-
-        {error && (
-          <p role="alert" className="text-danger text-xs mt-1">
-            {error}
-          </p>
-        )}
       </div>
+
+      {error && (
+        <p role="alert" className="text-danger text-xs mt-2">
+          {error}
+        </p>
+      )}
 
       {useModalOpen && (
         <UseProductModal

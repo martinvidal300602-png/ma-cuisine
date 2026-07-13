@@ -1,4 +1,6 @@
+// src/components/Shopping/AddToListButton.jsx
 import { useState } from 'react';
+import Icon from '../UI/Icon';
 
 export default function AddToListButton({ product, onAdd }) {
   const [busy, setBusy] = useState(false);
@@ -28,16 +30,20 @@ export default function AddToListButton({ product, onAdd }) {
   };
 
   return (
-    <div className="space-y-1">
+    <>
       <button
         type="button"
         onClick={handleAdd}
         disabled={busy}
-        className="text-accent text-xs px-2 py-1 rounded bg-accent-light font-medium disabled:opacity-50"
+        aria-label={done ? 'Ajouté à la liste de courses' : 'Ajouter à la liste de courses'}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+          done ? 'text-fresh-ok bg-fresh-ok-bg' : 'text-accent hover:bg-accent-light'
+        }`}
       >
-        {done ? 'Ajouté' : 'Ajouter à la liste'}
+        <Icon name={done ? 'check' : 'cart'} size={14} strokeWidth={2} />
+        {done ? 'Ajouté' : 'Courses'}
       </button>
-      {error && <p className="text-danger text-xs">{error}</p>}
-    </div>
+      {error && <p className="text-danger text-xs basis-full">{error}</p>}
+    </>
   );
 }

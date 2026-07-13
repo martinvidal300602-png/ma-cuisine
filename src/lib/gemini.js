@@ -2,8 +2,9 @@
 // Analyse d'une photo large de frigo/placard via Google Gemini.
 
 import { z } from 'zod';
+import { runtimeConfig } from '../config/runtime';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_API_KEY = runtimeConfig.geminiApiKey;
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
 const GEMINI_MODEL = GEMINI_URL.match(/models\/([^:]+)/)?.[1] || 'unknown';

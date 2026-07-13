@@ -9,6 +9,17 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Méthode non autorisée.' });
+  }
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && req.headers.authorization !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ ok: false, error: 'Autorisation cron invalide.' });
+  }
+
   const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const ntfyTopic = process.env.NTFY_TOPIC;

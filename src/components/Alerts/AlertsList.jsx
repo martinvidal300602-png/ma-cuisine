@@ -1,37 +1,47 @@
 // src/components/Alerts/AlertsList.jsx
-import Badge from '../UI/Badge';
+import Icon from '../UI/Icon';
 import { joursRestants } from '../../hooks/useAlerts';
+import { jChip, toneClasses, toneVar } from '../../lib/freshness';
 
 function LigneProduit({ product }) {
-  const jours = joursRestants(product.date_expiration);
-  let badge;
-  if (jours < 0) badge = <Badge variant="danger">Périmé depuis {Math.abs(jours)} j</Badge>;
-  else if (jours === 0) badge = <Badge variant="warn">Aujourd'hui</Badge>;
-  else if (jours <= 3) badge = <Badge variant="warn">{jours} j</Badge>;
-  else badge = <Badge variant="ok">{jours} j</Badge>;
+  const chip = jChip(joursRestants(product.date_expiration));
 
   return (
-    <li className="bg-card rounded-card border border-border p-3 flex items-center justify-between gap-3">
+    <li
+      className="bg-card rounded-card border border-border shadow-card p-3 pl-4 flex items-center justify-between gap-3"
+      style={{ boxShadow: `inset 3px 0 0 ${toneVar(chip.tone)}` }}
+    >
       <div className="min-w-0">
-        <p className="font-medium text-sm truncate">{product.nom}</p>
-        <p className="text-xs text-muted truncate">
+        <p className="font-semibold text-sm truncate">{product.nom}</p>
+        <p className="text-xs text-muted truncate mt-0.5 flex items-center gap-1">
+          <Icon name="pin" size={11} />
           {product.emplacement ?? '—'}
           {product.marque ? ` · ${product.marque}` : ''}
         </p>
       </div>
-      {badge}
+      <div className={`j-chip ${toneClasses(chip.tone)}`} role="img" aria-label={chip.aria}>
+        <span className="j-num">{chip.num}</span>
+        <span className="j-lab">{chip.label}</span>
+      </div>
     </li>
   );
 }
 
-function Section({ titre, produits }) {
+function Section({ titre, tone, produits }) {
   if (produits.length === 0) return null;
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">
-        {titre} <span className="font-num">({produits.length})</span>
+    <section aria-label={titre}>
+      <h2 className="flex items-center gap-2 pb-2">
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: toneVar(tone) }}
+          aria-hidden="true"
+        />
+        <span className="font-display font-bold text-[13px] uppercase tracking-wide">{titre}</span>
+        <span className="font-num text-xs text-muted">{produits.length}</span>
+        <span className="flex-1 border-t border-border" aria-hidden="true" />
       </h2>
-      <ul className="space-y-2">
+      <ul className="space-y-2.5">
         {produits.map((p) => (
           <LigneProduit key={p.id} product={p} />
         ))}
@@ -41,7 +51,7 @@ function Section({ titre, produits }) {
 }
 
 /**
- * Trois sections : périmés / expire dans 3 jours / cette semaine,
+ * Trois sections : périmés / à manger vite / cette semaine,
  * avec un message encourageant si tout va bien.
  */
 export default function AlertsList({ perimes, expirentBientot, cetteSemaine }) {
@@ -51,7 +61,7 @@ export default function AlertsList({ perimes, expirentBientot, cetteSemaine }) {
     return (
       <div className="text-center py-16">
         <div className="text-5xl mb-3" aria-hidden="true">🎉</div>
-        <p className="font-semibold">Tout est sous contrôle !</p>
+        <p className="font-display font-bold text-lg">Tout est sous contrôle</p>
         <p className="text-muted text-sm mt-1">Aucun produit ne périme dans les 7 prochains jours.</p>
       </div>
     );
@@ -59,9 +69,9 @@ export default function AlertsList({ perimes, expirentBientot, cetteSemaine }) {
 
   return (
     <div className="space-y-6">
-      <Section titre="Périmés" produits={perimes} />
-      <Section titre="Expire dans 3 jours" produits={expirentBientot} />
-      <Section titre="Cette semaine" produits={cetteSemaine} />
+      <Section titre="Périmés" tone="expired" produits={perimes} />
+      <Section titre="À manger vite" tone="soon" produits={expirentBientot} />
+      <Section titre="Cette semaine" tone="week" produits={cetteSemaine} />
     </div>
   );
 }

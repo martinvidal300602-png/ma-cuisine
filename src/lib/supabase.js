@@ -1,17 +1,13 @@
-// src/lib/supabase.js
 import { createClient } from '@supabase/supabase-js';
+import { runtimeConfig } from '../config/runtime';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  // Erreur claire au démarrage si la config est absente
-  console.error(
-    'Configuration Supabase manquante : définissez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans votre fichier .env'
+if (!runtimeConfig.hasSupabase) {
+  throw new Error(
+    'Configuration Supabase manquante : définissez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY dans .env.local',
   );
 }
 
-export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
+export const supabase = createClient(runtimeConfig.supabaseUrl, runtimeConfig.supabaseAnonKey, {
   auth: {
     persistSession: true,
     storage: window.localStorage,

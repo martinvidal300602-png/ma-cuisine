@@ -118,5 +118,5 @@ END $$;
 --   'Frigo',
 --   1,
 --   'bouteille',
---   'martinvidal16@hotmail.fr'
+--   'prenom@exemple.fr'
 -- );

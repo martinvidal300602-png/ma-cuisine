@@ -28,17 +28,17 @@ export default function LoginForm({ onSignIn }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-bg">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-bg bg-tiles">
       <div className="w-full max-w-app">
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3" aria-hidden="true">🥕</div>
-          <h1 className="text-2xl font-bold">Ma Cuisine</h1>
-          <p className="text-muted text-sm mt-1">Inventaire alimentaire familial</p>
+          <p className="text-4xl mb-4" aria-hidden="true">🥕</p>
+          <h1 className="font-display font-extrabold text-4xl tracking-tight">Ma Cuisine</h1>
+          <p className="text-muted text-sm mt-2">Le garde-manger partagé de la famille</p>
         </div>
 
-        <div className="bg-card rounded-card border border-border p-5 shadow-sm">
+        <div className="bg-card rounded-card border border-border p-5 shadow-card">
           <label className="block mb-4">
-            <span className="block text-sm font-medium mb-1">Email</span>
+            <span className="block text-sm font-semibold mb-1.5">Email</span>
             <input
               type="email"
               autoComplete="email"
@@ -51,7 +51,7 @@ export default function LoginForm({ onSignIn }) {
           </label>
 
           <label className="block mb-5">
-            <span className="block text-sm font-medium mb-1">Mot de passe</span>
+            <span className="block text-sm font-semibold mb-1.5">Mot de passe</span>
             <input
               type="password"
               autoComplete="current-password"

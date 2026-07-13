@@ -1,12 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
 import Button from '../UI/Button';
 import ManualForm from './ManualForm';
 import { chercherParCodeBarres } from '../../lib/openfoodfacts';
-
-const reader = new BrowserMultiFormatReader(undefined, {
-  delayBetweenScanAttempts: 300,
-});
 
 export default function BarcodeScanner({ onSubmit }) {
   const [barcode, setBarcode] = useState('');
@@ -16,9 +11,20 @@ export default function BarcodeScanner({ onSubmit }) {
   const [prefill, setPrefill] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [cameraLoading, setCameraLoading] = useState(false);
 
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
+  const readerRef = useRef(null);
+
+  const getReader = useCallback(async () => {
+    if (readerRef.current) return readerRef.current;
+    const { BrowserMultiFormatReader } = await import('@zxing/browser');
+    readerRef.current = new BrowserMultiFormatReader(undefined, {
+      delayBetweenScanAttempts: 300,
+    });
+    return readerRef.current;
+  }, []);
 
   const handleSearch = useCallback(
     async (code) => {
@@ -48,6 +54,7 @@ export default function BarcodeScanner({ onSubmit }) {
     controlsRef.current?.stop();
     controlsRef.current = null;
     setScanning(false);
+    setCameraLoading(false);
   }, []);
 
   useEffect(() => {
@@ -56,7 +63,11 @@ export default function BarcodeScanner({ onSubmit }) {
     let cancelled = false;
 
     (async () => {
+      setCameraLoading(true);
       try {
+        const reader = await getReader();
+        if (cancelled) return;
+
         const controls = await reader.decodeFromVideoDevice(
           undefined,
           videoRef.current,
@@ -67,6 +78,7 @@ export default function BarcodeScanner({ onSubmit }) {
               ctrl.stop();
               controlsRef.current = null;
               setScanning(false);
+              setCameraLoading(false);
               handleSearch(code);
             }
           },
@@ -75,10 +87,12 @@ export default function BarcodeScanner({ onSubmit }) {
           controls.stop();
         } else {
           controlsRef.current = controls;
+          setCameraLoading(false);
         }
       } catch (err) {
         if (cancelled) return;
         setScanning(false);
+        setCameraLoading(false);
         setCameraError(
           err.name === 'NotAllowedError'
             ? "L'accès à la caméra a été refusé."
@@ -94,7 +108,7 @@ export default function BarcodeScanner({ onSubmit }) {
       controlsRef.current?.stop();
       controlsRef.current = null;
     };
-  }, [scanning, handleSearch]);
+  }, [scanning, handleSearch, getReader]);
 
   const startCamera = useCallback(() => {
     setCameraError(null);
@@ -107,7 +121,6 @@ export default function BarcodeScanner({ onSubmit }) {
   return (
     <div className="space-y-4">
       <div className="bg-card rounded-card border border-border p-4 space-y-3">
-        {/* Video element — always in the DOM so the ref is stable for Safari iOS */}
         <div
           className={`relative w-full bg-black rounded-card overflow-hidden ${scanning ? 'aspect-[4/3]' : 'hidden'}`}
         >
@@ -127,7 +140,7 @@ export default function BarcodeScanner({ onSubmit }) {
                 />
               </div>
               <p className="absolute bottom-3 left-0 right-0 text-center text-white/80 text-xs">
-                Placez le code-barres dans le cadre
+                {cameraLoading ? 'Chargement du scanner…' : 'Placez le code-barres dans le cadre'}
               </p>
             </>
           )}

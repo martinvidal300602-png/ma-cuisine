@@ -1,3 +1,6 @@
+// src/components/Shopping/ShoppingActiveBanner.jsx
+import { ShoppingCart, ChevronRight } from 'lucide-react';
+
 export default function ShoppingActiveBanner({ session, onOpen }) {
   if (!session) return null;
 
@@ -5,9 +8,13 @@ export default function ShoppingActiveBanner({ session, onOpen }) {
     <button
       type="button"
       onClick={onOpen}
-      className="w-full bg-accent-light text-accent rounded-card border border-accent/30 px-3 py-2 text-left text-sm font-medium"
+      className="pressable w-full bg-fresh-soon-bg text-fresh-soon rounded-card px-3.5 py-3 flex items-center gap-2.5 text-left"
     >
-      {session.started_by || 'Quelqu’un'} est en train de faire les courses
+      <ShoppingCart size={17} strokeWidth={2} className="shrink-0" />
+      <span className="flex-1 text-sm font-semibold truncate">
+        {session.started_by || 'Quelqu’un'} est en train de faire les courses
+      </span>
+      <ChevronRight size={15} className="shrink-0" />
     </button>
   );
 }
