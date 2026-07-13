@@ -1,23 +1,34 @@
-# Ma Cuisine — V2 mix
+# Ma Cuisine V3
 
-PWA familiale d’inventaire alimentaire, pensée pour être ouverte depuis l’écran d’accueil d’un iPhone.
+PWA familiale conçue pour trois personnes sur iPhone. Ma Cuisine réunit le stock alimentaire partagé, les dates de consommation, quatre modes de scan et toute la préparation des courses dans une interface sobre inspirée des applications Apple.
 
-Cette version combine :
+## Espaces de l’application
 
-- la logique métier stable du projet initial ;
-- l’accueil décisionnel et la navigation mobile de Fable V2 ;
-- des correctifs de robustesse ajoutés lors de l’intégration.
+- **Aujourd’hui** : trois décisions prioritaires au maximum, produits de la semaine, état des courses, recommandation et raccourcis scanner.
+- **Cuisine** : quatre emplacements officiels, vue globale, recherche, filtres, quantités, DLC et actions produit en sheet.
+- **Scanner** : code-barres OpenFoodFacts, photo d’emplacement Gemini, ticket et ajout manuel.
+- **Courses** : ajout rapide, suggestions, rayons, progression, mode magasin plein écran et fin guidée par ticket.
+- **Activité** : ajouts, consommations, suppressions, changements de liste et sessions, dérivés des données existantes et des mises à jour Realtime.
 
-## Stack
+Les Réglages sont accessibles depuis le bouton profil de chaque écran principal.
 
-React 18, Vite, Tailwind CSS, Supabase Auth/PostgreSQL/Realtime, Gemini 2.5 Flash Lite, OpenFoodFacts, ntfy.sh et Vercel.
+## Stack et services conservés
+
+- React 18, Vite et Tailwind CSS ;
+- Supabase Auth, PostgreSQL et Realtime ;
+- Gemini `gemini-2.5-flash-lite`, parsing Zod strict, image complète et six crops ;
+- OpenFoodFacts et ZXing chargé uniquement à l’ouverture du scan code-barres ;
+- ntfy via la fonction Vercel `/api/notify` ;
+- PWA avec manifest, icônes 180/192/512 et service worker.
+
+Aucune migration Supabase n’est requise par la V3.
 
 ## Installation locale
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
-# Remplir .env.local
+# Compléter .env.local
 npm run dev
 ```
 
@@ -29,25 +40,9 @@ VITE_SUPABASE_ANON_KEY=eyJ...
 VITE_GEMINI_API_KEY=AIza...
 ```
 
-Les deux variables Supabase sont obligatoires. La clé Gemini est nécessaire uniquement pour l’analyse photo et le ticket. Si Supabase n’est pas configuré, l’application affiche désormais un écran d’aide au lieu d’une page blanche.
+Les variables Supabase sont obligatoires. Sans elles, un écran de configuration est affiché. Gemini est requis uniquement pour l’analyse des photos et tickets ; le reste de l’application demeure utilisable si sa clé est absente.
 
-## Validation
-
-```bash
-npm run build
-npm run preview
-```
-
-## Test sur iPhone
-
-```bash
-npm run dev -- --host 0.0.0.0
-ipconfig getifaddr en0
-```
-
-Ouvrir ensuite `http://ADRESSE_IP_DU_MAC:5173` dans Safari sur l’iPhone. Pour un test réaliste de l’installation, déployer en HTTPS puis utiliser Partager → Sur l’écran d’accueil.
-
-## Variables serveur Vercel
+Variables serveur Vercel :
 
 ```env
 NTFY_TOPIC=...
@@ -56,4 +51,24 @@ SUPABASE_URL=...
 CRON_SECRET=...
 ```
 
-Le champ ntfy dans Réglages est uniquement un mémo local. Le cron utilise `NTFY_TOPIC` côté Vercel. Quand `CRON_SECRET` est défini, `/api/notify` refuse les appels non autorisés.
+## Vérification
+
+```bash
+npm run validate
+npm test
+npm run build
+npm run preview
+```
+
+`npm run validate` contrôle les quatre emplacements, le modèle Gemini, Zod, les crops, l’import dynamique ZXing, le lazy loading, les icônes et le manifest.
+
+## Test sur iPhone
+
+```bash
+npm run dev -- --host 0.0.0.0
+ipconfig getifaddr en0
+```
+
+Ouvrir `http://ADRESSE_IP_DU_MAC:5173` dans Safari. Pour tester l’installation PWA et la caméra dans des conditions réalistes, utiliser un déploiement HTTPS, puis **Partager → Sur l’écran d’accueil**.
+
+Le détail de la livraison figure dans `V3_REPORT.md` et `VALIDATION.md`.
