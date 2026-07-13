@@ -3,6 +3,7 @@ import { CheckCircle2, CircleAlert, Cloud, Cpu, BellRing } from 'lucide-react';
 import Button from '../components/UI/Button';
 import PwaInstallHint from '../components/UI/PwaInstallHint';
 import { runtimeConfig } from '../config/runtime';
+import MobileHeader from '../components/UI/MobileHeader';
 
 const NTFY_STORAGE_KEY = 'ma-cuisine:ntfy-topic';
 
@@ -10,7 +11,7 @@ const NTFY_STORAGE_KEY = 'ma-cuisine:ntfy-topic';
  * Réglages locaux et état des intégrations.
  * Le topic ntfy stocké ici sert uniquement de mémo : le cron utilise NTFY_TOPIC côté Vercel.
  */
-export default function Settings({ userEmail, onSignOut }) {
+export default function Settings({ userEmail, onSignOut, onClose }) {
   const [topic, setTopic] = useState(() => {
     try {
       return localStorage.getItem(NTFY_STORAGE_KEY) ?? '';
@@ -45,9 +46,7 @@ export default function Settings({ userEmail, onSignOut }) {
 
   return (
     <div className="space-y-4">
-      <header className="mb-4">
-        <h1 className="font-display font-extrabold text-2xl">Réglages</h1>
-      </header>
+      <MobileHeader title="Réglages" subtitle="Compte, installation et services" onBack={onClose} />
 
       <PwaInstallHint />
 

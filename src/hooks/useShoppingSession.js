@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 
 export function useShoppingSession() {
   const [activeSession, setActiveSession] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -11,11 +12,8 @@ export function useShoppingSession() {
     const { data, error: err } = await supabase
       .from('courses_sessions')
       .select('*')
-      .eq('active', true)
-      .eq('status', 'active')
       .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(12);
 
     if (err) {
       setError('Impossible de charger la session courses : ' + err.message);
@@ -23,7 +21,9 @@ export function useShoppingSession() {
       return;
     }
 
-    setActiveSession(data ?? null);
+    const recent = data ?? [];
+    setSessions(recent);
+    setActiveSession(recent.find((item) => item.active && item.status === 'active') ?? null);
     setLoading(false);
   }, []);
 
@@ -54,6 +54,7 @@ export function useShoppingSession() {
       if (currentErr) throw new Error('Vérification de session impossible : ' + currentErr.message);
       if (current) {
         setActiveSession(current);
+        await fetchActiveSession();
         return current;
       }
 
@@ -67,7 +68,7 @@ export function useShoppingSession() {
       setActiveSession(data);
       return data;
     },
-    []
+    [fetchActiveSession]
   );
 
   const finishSession = useCallback(
@@ -100,6 +101,7 @@ export function useShoppingSession() {
 
   return {
     activeSession,
+    sessions,
     loading,
     error,
     startSession,

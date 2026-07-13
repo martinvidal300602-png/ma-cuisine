@@ -1,5 +1,5 @@
 // src/components/UI/TabBar.jsx
-import { Sun, Refrigerator, ShoppingCart, Settings as SettingsIcon, ScanLine } from 'lucide-react';
+import { Sun, Refrigerator, ShoppingCart, Clock3, ScanLine } from 'lucide-react';
 
 /**
  * Barre d'onglets iOS : 4 destinations + bouton Scanner central surélevé.
@@ -11,7 +11,7 @@ const LEFT_TABS = [
 ];
 const RIGHT_TABS = [
   { id: 'courses', label: 'Courses', icon: ShoppingCart },
-  { id: 'reglages', label: 'Réglages', icon: SettingsIcon },
+  { id: 'activite', label: 'Activité', icon: Clock3 },
 ];
 
 function Tab({ tab, active, onChange, badge = 0 }) {
@@ -47,7 +47,7 @@ export default function TabBar({ active, onChange, onScan, alertCount = 0 }) {
   return (
     <nav aria-label="Navigation principale" className="fixed bottom-0 inset-x-0 z-40">
       <div className="tabbar-blur border-t border-border pb-safe">
-        <div className="max-w-app mx-auto h-[62px] grid grid-cols-5 items-stretch px-1">
+        <div className="max-w-app mx-auto h-[64px] grid grid-cols-5 items-stretch px-1">
           {LEFT_TABS.map((tab) => (
             <Tab
               key={tab.id}

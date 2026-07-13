@@ -6,7 +6,7 @@ import { ChevronLeft } from 'lucide-react';
  */
 export default function MobileHeader({ title, subtitle, onBack, right }) {
   return (
-    <header className="mb-4 flex items-start gap-3">
+    <header className="mb-5 flex items-start gap-3">
       {onBack && (
         <button
           type="button"
@@ -18,7 +18,7 @@ export default function MobileHeader({ title, subtitle, onBack, right }) {
         </button>
       )}
       <div className="flex-1 min-w-0">
-        <h1 className="font-display font-extrabold text-[26px] leading-tight truncate">{title}</h1>
+        <h1 className="font-display font-bold text-[30px] leading-[1.08] truncate">{title}</h1>
         {subtitle && <p className="text-muted text-sm mt-0.5">{subtitle}</p>}
       </div>
       {right && <div className="shrink-0 pt-1">{right}</div>}
