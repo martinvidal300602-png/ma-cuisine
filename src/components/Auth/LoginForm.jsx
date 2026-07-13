@@ -1,6 +1,7 @@
 // src/components/Auth/LoginForm.jsx
 import { useState } from 'react';
 import Button from '../UI/Button';
+import { CookingPot } from 'lucide-react';
 
 /**
  * Écran de connexion plein écran (email + mot de passe via Supabase Auth).
@@ -28,12 +29,14 @@ export default function LoginForm({ onSignIn }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-bg bg-tiles">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-bg pt-safe pb-safe">
       <div className="w-full max-w-app">
         <div className="text-center mb-8">
-          <p className="text-4xl mb-4" aria-hidden="true">🥕</p>
-          <h1 className="font-display font-extrabold text-4xl tracking-tight">Ma Cuisine</h1>
-          <p className="text-muted text-sm mt-2">Le garde-manger partagé de la famille</p>
+          <span className="w-16 h-16 rounded-[20px] mx-auto mb-5 bg-accent text-white flex items-center justify-center shadow-card">
+            <CookingPot size={30} strokeWidth={1.8} />
+          </span>
+          <h1 className="font-display font-bold text-[36px] tracking-[-0.04em]">Ma Cuisine</h1>
+          <p className="text-muted text-sm mt-2">La cuisine partagée de la famille</p>
         </div>
 
         <div className="bg-card rounded-card border border-border p-5 shadow-card">
@@ -45,7 +48,7 @@ export default function LoginForm({ onSignIn }) {
               inputMode="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-card border border-border bg-bg text-sm"
+              className="w-full px-3.5 h-12 rounded-card border border-border bg-bg text-base"
               placeholder="vous@exemple.fr"
             />
           </label>
@@ -58,7 +61,7 @@ export default function LoginForm({ onSignIn }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              className="w-full px-3 py-2.5 rounded-card border border-border bg-bg text-sm"
+              className="w-full px-3.5 h-12 rounded-card border border-border bg-bg text-base"
               placeholder="••••••••"
             />
           </label>

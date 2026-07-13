@@ -12,12 +12,12 @@ export default function Button({
   ...props
 }) {
   const base =
-    'inline-flex items-center justify-center gap-2 font-semibold rounded-card transition-colors ' +
+    'pressable inline-flex min-h-11 items-center justify-center gap-2 font-semibold rounded-card transition-colors ' +
     'disabled:opacity-50 disabled:cursor-not-allowed select-none';
 
   const variants = {
-    primary: 'bg-accent text-white hover:bg-[#275934] active:bg-[#214B2C]',
-    secondary: 'bg-card text-text border border-border hover:border-accent hover:text-accent',
+    primary: 'bg-accent text-white hover:opacity-90',
+    secondary: 'bg-card text-text border border-border hover:border-accent',
     ghost: 'bg-transparent text-accent hover:bg-accent-light',
     danger: 'bg-danger text-white hover:opacity-90 active:opacity-80',
   };

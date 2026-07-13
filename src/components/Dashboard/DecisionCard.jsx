@@ -83,7 +83,7 @@ export default function DecisionCard({ product, actions }) {
 
   return (
     <article
-      className="snap-card shrink-0 w-[252px] bg-card rounded-card border border-border shadow-card p-3.5 flex flex-col"
+      className="w-full bg-card rounded-card border border-border p-3.5 flex flex-col"
       style={{ boxShadow: `inset 0 3px 0 ${toneVar(chip.tone)}` }}
     >
       <div className="flex items-start justify-between gap-2">

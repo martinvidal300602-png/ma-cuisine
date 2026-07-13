@@ -8,6 +8,7 @@ import ShoppingItem from '../components/Shopping/ShoppingItem';
 import ShopMode from '../components/Shopping/ShopMode';
 import ShoppingActiveBanner from '../components/Shopping/ShoppingActiveBanner';
 import { CATEGORIES } from '../components/Add/ManualForm';
+import ProfileButton from '../components/UI/ProfileButton';
 
 const DEFAULT_FORM = {
   nom: '',
@@ -30,12 +31,14 @@ export default function Courses({
   userEmail,
   addShoppingItem,
   onScanReceipt,
+  onOpenSettings,
 }) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState(null);
   const [shopModeOpen, setShopModeOpen] = useState(false);
   const [addedSuggestions, setAddedSuggestions] = useState(new Set());
+  const [showChecked, setShowChecked] = useState(false);
 
   const set = (key) => (e) => setForm((current) => ({ ...current, [key]: e.target.value }));
 
@@ -143,9 +146,25 @@ export default function Courses({
               ? 'Rien à acheter pour le moment'
               : `${remaining.length} produit${remaining.length > 1 ? 's' : ''} à acheter`
         }
+        right={<ProfileButton onClick={onOpenSettings} email={userEmail} />}
       />
 
       <ShoppingActiveBanner session={session.activeSession} onOpen={() => setShopModeOpen(true)} />
+
+      {shopping.items.length > 0 && (
+        <section className="bg-card rounded-card border border-border p-3.5" aria-label="Progression de la liste">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="font-semibold">Préparation</span>
+            <span className="font-num text-muted">{checked.length}/{shopping.items.length}</span>
+          </div>
+          <div className="h-2 rounded-full bg-bg overflow-hidden" role="progressbar" aria-valuemin="0" aria-valuemax={shopping.items.length} aria-valuenow={checked.length}>
+            <div
+              className="h-full rounded-full bg-accent transition-[width] duration-200"
+              style={{ width: `${shopping.items.length ? (checked.length / shopping.items.length) * 100 : 0}%` }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Ajout rapide : une ligne, détails optionnels */}
       <div className="bg-card rounded-card border border-border shadow-card p-3 space-y-2.5">
@@ -297,12 +316,20 @@ export default function Courses({
 
           {checked.length > 0 && (
             <section aria-label="Déjà cochés">
-              <h2 className="flex items-center gap-2 pb-2">
-                <span className="font-display font-bold text-[13px] uppercase tracking-wide text-muted">
-                  Déjà cochés
-                </span>
-                <span className="font-num text-xs text-muted">{checked.length}</span>
-                <span className="flex-1 border-t border-border" aria-hidden="true" />
+              <div className="flex items-center gap-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setShowChecked((value) => !value)}
+                  className="pressable flex items-center gap-2 flex-1 text-left min-h-9"
+                  aria-expanded={showChecked}
+                >
+                  <span className="font-display font-bold text-[13px] uppercase tracking-wide text-muted">
+                    Déjà cochés
+                  </span>
+                  <span className="font-num text-xs text-muted">{checked.length}</span>
+                  <span className="flex-1 border-t border-border" aria-hidden="true" />
+                  {showChecked ? <ChevronUp size={15} className="text-muted" /> : <ChevronDown size={15} className="text-muted" />}
+                </button>
                 <button
                   type="button"
                   onClick={handleClearChecked}
@@ -311,17 +338,19 @@ export default function Courses({
                   <Trash2 size={13} strokeWidth={2.2} />
                   Vider
                 </button>
-              </h2>
-              <div className="space-y-2.5">
-                {checked.map((item) => (
-                  <ShoppingItem
-                    key={item.id}
-                    item={item}
-                    onToggle={(id, coche) => shopping.updateItem(id, { coche })}
-                    onDelete={shopping.deleteItem}
-                  />
-                ))}
               </div>
+              {showChecked && (
+                <div className="space-y-2.5">
+                  {checked.map((item) => (
+                    <ShoppingItem
+                      key={item.id}
+                      item={item}
+                      onToggle={(id, coche) => shopping.updateItem(id, { coche })}
+                      onDelete={shopping.deleteItem}
+                    />
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </div>
@@ -331,7 +360,7 @@ export default function Courses({
 
       {/* CTA magasin, au-dessus de la tab bar */}
       {shopping.items.length > 0 && (
-        <div className="fixed bottom-[62px] inset-x-0 z-30 pointer-events-none">
+        <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom))] inset-x-0 z-30 pointer-events-none">
           <div className="max-w-app mx-auto px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <Button size="lg" className="pointer-events-auto shadow-sheet" onClick={handleStart}>
               <ShoppingCart size={17} strokeWidth={2.1} />

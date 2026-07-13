@@ -3,11 +3,11 @@ import { PartyPopper, ChevronRight } from 'lucide-react';
 import DecisionCard from './DecisionCard';
 
 /**
- * « À faire maintenant » : carrousel de cartes de décision
- * pour les produits périmés ou expirant sous 3 jours.
+ * « À faire maintenant » : au plus trois décisions, sans carrousel tronqué.
  */
 export default function TodayFocus({ perimes, expirentBientot, actions, onSeeAll }) {
   const urgents = [...perimes, ...expirentBientot];
+  const priorites = urgents.slice(0, 3);
 
   return (
     <section aria-label="À faire maintenant">
@@ -35,8 +35,8 @@ export default function TodayFocus({ perimes, expirentBientot, actions, onSeeAll
           </div>
         </div>
       ) : (
-        <div className="snap-row flex gap-2.5 overflow-x-auto -mx-4 px-4 pb-1">
-          {urgents.map((p) => (
+        <div className="space-y-2.5">
+          {priorites.map((p) => (
             <DecisionCard key={p.id} product={p} actions={actions} />
           ))}
         </div>

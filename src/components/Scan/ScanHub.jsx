@@ -4,16 +4,16 @@ import Sheet from '../UI/Sheet';
 
 const MODES = [
   {
-    id: 'photo',
-    icon: Camera,
-    title: 'Photo du frigo ou du placard',
-    desc: 'Les produits visibles sont détectés automatiquement.',
-  },
-  {
     id: 'barcode',
     icon: Barcode,
     title: 'Code-barres',
     desc: 'Fiche pré-remplie depuis OpenFoodFacts.',
+  },
+  {
+    id: 'photo',
+    icon: Camera,
+    title: 'Photo d’un emplacement',
+    desc: 'Détectez plusieurs produits, puis vérifiez-les.',
   },
   {
     id: 'receipt',
@@ -34,7 +34,8 @@ const MODES = [
  */
 export default function ScanHub({ onSelect, onClose }) {
   return (
-    <Sheet title="Ajouter au stock" onClose={onClose}>
+    <Sheet title="Scanner" onClose={onClose}>
+      <p className="text-sm text-muted -mt-1 mb-3">Choisissez ce que vous avez devant vous.</p>
       <div className="space-y-2">
         {MODES.map(({ id, icon: IconCmp, title, desc }) => (
           <button

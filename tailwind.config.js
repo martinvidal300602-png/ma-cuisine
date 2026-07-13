@@ -29,19 +29,19 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Gabarito', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['"Bricolage Grotesque"', 'Gabarito', 'system-ui', 'sans-serif'],
-        mono: ['"Spline Sans Mono"', 'ui-monospace', 'monospace'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Helvetica Neue"', 'sans-serif'],
+        display: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"Helvetica Neue"', 'sans-serif'],
+        mono: ['"SF Mono"', 'ui-monospace', 'monospace'],
       },
       maxWidth: {
         app: '480px',
       },
       borderRadius: {
-        card: '14px',
+        card: '16px',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(30, 36, 32, 0.05)',
-        sheet: '0 -8px 30px rgba(30, 36, 32, 0.12)',
+        card: '0 0.5px 0 rgba(60, 60, 67, 0.12)',
+        sheet: '0 -12px 44px rgba(0, 0, 0, 0.18)',
       },
     },
   },

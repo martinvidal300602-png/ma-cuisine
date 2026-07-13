@@ -7,6 +7,7 @@ import ProductList from '../components/Inventory/ProductList';
 import { EMPLACEMENTS } from '../components/Add/ManualForm';
 import { joursRestants } from '../hooks/useAlerts';
 import { toneVar } from '../lib/freshness';
+import ProfileButton from '../components/UI/ProfileButton';
 
 const LOCATION_ICONS = {
   Frigo: Refrigerator,
@@ -27,6 +28,8 @@ export default function Cuisine({
   initialEmplacement = null,
   onConsumeTarget,
   onOpenScan,
+  userEmail,
+  onOpenSettings,
 }) {
   // 'overview' | 'tous' | un des 4 emplacements
   const [view, setView] = useState(initialEmplacement ?? 'overview');
@@ -114,7 +117,11 @@ export default function Cuisine({
 
   return (
     <div>
-      <MobileHeader title="Cuisine" subtitle="Où sont rangés vos produits" />
+      <MobileHeader
+        title="Cuisine"
+        subtitle="Tout le stock, rangé comme chez vous"
+        right={<ProfileButton onClick={onOpenSettings} email={userEmail} />}
+      />
 
       {/* Recherche globale : ouvre la vue Tout */}
       <div className="relative mb-3">

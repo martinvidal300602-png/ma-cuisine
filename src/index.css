@@ -1,148 +1,203 @@
-/* src/index.css — design system « Garde-manger » v2 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Faïence : fond vert-gris porcelaine, encre vert-noir */
-  --color-bg: #EFF1ED;
-  --color-card: #FFFFFF;
-  --color-text: #1E2420;
-  --color-muted: #687066;
-  --color-border: #DBDFD8;
-
-  /* Accent : vert cocotte */
-  --color-accent: #2F6B3F;
-  --color-accent-light: #E2EEE3;
-
-  /* Compat anciens tokens */
-  --color-warn: #C75B1E;
-  --color-warn-light: #F9EADF;
-  --color-danger: #A92E20;
-
-  /* Échelle de fraîcheur (la donnée colore l'interface) */
-  --fresh-ok: #2F6B3F;        --fresh-ok-bg: #E2EEE3;
-  --fresh-week: #9A7110;      --fresh-week-bg: #F6EDD4;
-  --fresh-soon: #C75B1E;      --fresh-soon-bg: #F9EADF;
-  --fresh-expired: #A92E20;   --fresh-expired-bg: #F7E4E0;
-  --fresh-none: #687066;      --fresh-none-bg: #E9EBE6;
+  color-scheme: light dark;
+  --color-bg: #f2f2f7;
+  --color-card: #ffffff;
+  --color-elevated: #ffffff;
+  --color-text: #1c1c1e;
+  --color-muted: #6e6e73;
+  --color-border: rgba(60, 60, 67, 0.16);
+  --color-accent: #217a45;
+  --color-accent-light: #e6f3ea;
+  --color-warn: #a85d00;
+  --color-warn-light: #fff3df;
+  --color-danger: #c52b34;
+  --fresh-ok: #217a45;
+  --fresh-ok-bg: #e6f3ea;
+  --fresh-week: #8a6500;
+  --fresh-week-bg: #fff6d9;
+  --fresh-soon: #a85d00;
+  --fresh-soon-bg: #fff0dc;
+  --fresh-expired: #c52b34;
+  --fresh-expired-bg: #fdebed;
+  --fresh-none: #6e6e73;
+  --fresh-none-bg: #ededf2;
+  --tabbar: rgba(250, 250, 252, 0.82);
+  --backdrop: rgba(0, 0, 0, 0.36);
 }
 
-html,
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #000000;
+    --color-card: #1c1c1e;
+    --color-elevated: #2c2c2e;
+    --color-text: #f5f5f7;
+    --color-muted: #98989d;
+    --color-border: rgba(84, 84, 88, 0.62);
+    --color-accent: #4fc178;
+    --color-accent-light: #173c25;
+    --color-warn: #ffb340;
+    --color-warn-light: #3d2b0d;
+    --color-danger: #ff6961;
+    --fresh-ok: #4fc178;
+    --fresh-ok-bg: #173c25;
+    --fresh-week: #ffd55c;
+    --fresh-week-bg: #3a3211;
+    --fresh-soon: #ffb340;
+    --fresh-soon-bg: #3d2b0d;
+    --fresh-expired: #ff6961;
+    --fresh-expired-bg: #451c20;
+    --fresh-none: #98989d;
+    --fresh-none-bg: #2c2c2e;
+    --tabbar: rgba(28, 28, 30, 0.78);
+    --backdrop: rgba(0, 0, 0, 0.58);
+  }
+}
+
+html {
+  min-height: 100%;
+  background: var(--color-bg);
+}
+
 body {
-  background-color: var(--color-bg);
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--color-bg);
   color: var(--color-text);
-  font-family: 'Gabarito', system-ui, -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
 }
 
-/* Titres & wordmark */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+[role='button'] {
+  touch-action: manipulation;
+}
+
 .font-display {
-  font-family: 'Bricolage Grotesque', 'Gabarito', system-ui, sans-serif;
-  letter-spacing: -0.015em;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  letter-spacing: -0.025em;
 }
 
-/* Données numériques (quantités, dates, compteurs) */
 .font-num {
-  font-family: 'Spline Sans Mono', ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 
-/* Focus clavier visible */
 *:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
-/* Safe area iOS pour la nav basse */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Motif faïence ultra-discret (écran de connexion) */
-.bg-tiles {
-  background-image:
-    linear-gradient(var(--color-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
-  background-size: 28px 28px;
-  background-position: center;
-}
-
-/* Pastille « jours restants » */
-.j-chip {
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 52px;
-  border-radius: 12px;
-  padding: 6px 8px;
-  line-height: 1;
-}
-.j-chip .j-num { font-size: 17px; font-weight: 700; }
-.j-chip .j-lab { font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; opacity: 0.85; }
-
-/* Squelettes de chargement */
-.skeleton {
-  border-radius: 12px;
-  background: linear-gradient(100deg, var(--color-border) 40%, var(--color-card) 50%, var(--color-border) 60%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite linear;
-}
-@keyframes shimmer { to { background-position: -200% 0; } }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-}
-
-/* ====== Couche « app native » (V2 produit) ====== */
-
-/* Zone safe haute pour les vues plein écran */
 .pt-safe {
   padding-top: max(env(safe-area-inset-top, 0px), 12px);
 }
 
-/* Tab bar : verre dépoli */
 .tabbar-blur {
-  background: color-mix(in srgb, var(--color-card) 86%, transparent);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
-  backdrop-filter: saturate(160%) blur(14px);
+  background: var(--tabbar);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
 }
 
-/* Bouton central Scanner */
+.native-header {
+  padding-top: max(env(safe-area-inset-top, 0px), 10px);
+}
+
 .fab-scan {
-  box-shadow: 0 6px 18px rgba(47, 107, 63, 0.38), 0 2px 4px rgba(30, 36, 32, 0.18);
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--color-accent) 34%, transparent);
 }
 
-/* Retour tactile : léger enfoncement au toucher */
 .pressable {
-  transition: transform 120ms ease, opacity 120ms ease;
-}
-.pressable:active {
-  transform: scale(0.97);
+  transition: transform 120ms ease, opacity 120ms ease, background-color 160ms ease;
 }
 
-/* Feuilles modales (bottom sheets) et vues plein écran */
+.pressable:active {
+  transform: scale(0.975);
+  opacity: 0.82;
+}
+
+.j-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 50px;
+  border-radius: 12px;
+  padding: 6px 8px;
+  line-height: 1;
+}
+
+.j-chip .j-num {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.j-chip .j-lab {
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.86;
+}
+
+.skeleton {
+  border-radius: 16px;
+  background: linear-gradient(100deg, var(--color-border) 35%, var(--color-card) 50%, var(--color-border) 65%);
+  background-size: 200% 100%;
+  animation: shimmer 1.35s infinite linear;
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
 @keyframes sheet-up {
-  from { transform: translateY(24px); opacity: 0; }
+  from { transform: translateY(28px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.sheet-backdrop { animation: fade-in 160ms ease-out; }
-.sheet-panel { animation: sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1); }
-.view-rise { animation: sheet-up 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 
-/* Carrousel à pas (cartes de décision) */
-.snap-row {
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+.sheet-backdrop { animation: fade-in 160ms ease-out; }
+.sheet-panel { animation: sheet-up 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+.view-rise { animation: sheet-up 210ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+.hairline {
+  border-color: var(--color-border);
+  border-width: 0.5px;
+}
+
+.hide-scrollbar {
   scrollbar-width: none;
 }
-.snap-row::-webkit-scrollbar { display: none; }
-.snap-card { scroll-snap-align: start; }
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}
